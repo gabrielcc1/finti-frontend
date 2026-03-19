@@ -1,0 +1,62 @@
+/* src/app/globals.css
+ *
+ * Variables CSS del tema Finti — sincronizadas con el objeto `tema` de los componentes.
+ * Al estar en CSS, se aplican ANTES que React hidrate, eliminando el destello.
+ * El script del layout ya pone la clase 'dark' en <html> antes del primer paint,
+ * así que estas variables están disponibles desde el frame cero.
+ */
+
+/* ── Reset mínimo ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; padding: 0; }
+
+/* ── Tema claro (default) ─────────────────────────────────────────────────── */
+:root {
+  --bg:            #fafaf8;
+  --surface:       #ffffff;
+  --surface-alt:   #f5f5f2;
+  --border:        #e8e8e4;
+  --text:          #111827;
+  --text-muted:    #6b7280;
+  --text-faint:    #9ca3af;
+  --accent:        #111827;
+  --accent-text:   #ffffff;
+  --shadow:        0 1px 4px rgba(0,0,0,0.06);
+}
+
+/* ── Tema oscuro ──────────────────────────────────────────────────────────── */
+html.dark {
+  --bg:            #141210;
+  --surface:       #1c1916;
+  --surface-alt:   #211e1b;
+  --border:        #2e2924;
+  --text:          #e8e0d4;
+  --text-muted:    #7a6e62;
+  --text-faint:    #4a4238;
+  --accent:        #d4a96a;
+  --accent-text:   #141210;
+  --shadow:        0 1px 6px rgba(0,0,0,0.4);
+}
+
+/* ── Aplicar colores base al html/body — este es el fix del flash ─────────── 
+ * Cuando React todavía no hidrató, el usuario ve estos colores CSS.
+ * Cuando React hidrata y aplica los inline styles, ya coinciden → sin destello.
+ */
+html {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-dm-sans), 'DM Sans', system-ui, sans-serif;
+  /* Transición suave al cambiar tema manualmente */
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* ── Scrollbar consistente con el tema ───────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
