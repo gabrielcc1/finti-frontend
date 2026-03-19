@@ -1,0 +1,6 @@
+- [x] Estructura básica de React creada con Vite
+- [x] Archivos principales generados: README.md, package.json, vite.config.js, index.html, src/main.jsx, src/App.jsx, src/finti-dashboard.jsx
+- [x] Listo para instalar dependencias y ejecutar con npm
+- [ ] Personalizar App.jsx para mostrar finti-dashboard.jsx
+- [ ] Instalar dependencias con npm install
+- [ ] Ejecutar npm run dev para vista previa
