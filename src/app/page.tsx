@@ -1,4 +1,8 @@
 // src/app/page.tsx
+import { redirect } from 'next/navigation'
+
 export default function Home() {
-  return null // El middleware se encarga de redirigir según la sesión
+  // Forzamos la entrada al login. 
+  // Si ya hay sesión, el Middleware te sacará de aquí hacia el dashboard automáticamente.
+  redirect('/login')
 }
