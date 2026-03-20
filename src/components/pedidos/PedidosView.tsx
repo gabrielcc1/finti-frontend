@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/shared/Sidebar'
+import { MenuMas } from '@/components/shared/MenuMas'
 import type { usePedidos, PedidoConCliente, CrearPedidoData, DatosVentaEntrega, EstadoPedido } from '@/hooks/usePedidos'
 import type { Cliente } from '@/types/database'
 
@@ -737,7 +738,7 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
       {/* Bottom nav mobile */}
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: t.navBg, backdropFilter: 'blur(16px)', borderTop: `1px solid ${t.border}`, padding: '10px 0 20px', display: 'flex', justifyContent: 'space-around', zIndex: 50 }}>
-          {[['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['📋','Pedidos','/pedidos'],['≋','Más','']].map(([icon,label,href]) => (
+          {[['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['📋','Pedidos','/pedidos']].map(([icon,label,href]) => (
             <div key={label} onClick={() => href && router.push(href)}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
               <div style={{ fontSize: 18, color: label === 'Pedidos' ? t.accent : t.textFaint }}>{icon}</div>
@@ -745,6 +746,7 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
               {label === 'Pedidos' && <div style={{ width: 4, height: 4, borderRadius: '50%', background: t.accent }} />}
             </div>
           ))}
+          <MenuMas t={t} dark={dark} />
         </div>
       )}
     </div>

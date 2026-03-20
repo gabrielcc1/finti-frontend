@@ -6,6 +6,7 @@ import { useDarkMode } from '@/hooks/useDarkMode'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/shared/Sidebar'
 import type { useStock } from '@/hooks/useStock'
+import { MenuMas } from '@/components/shared/MenuMas'
 import type { TipoMovimiento, MovimientoStock, NuevoProductoData, NuevaMateriaPrimaData, CompraMateriaPrimaData } from '@/hooks/useStock'
 import type { Producto, MateriaPrima } from '@/types/database'
 
@@ -983,13 +984,14 @@ export function StockView({ usuario, stock }: StockViewProps) {
       {/* Bottom nav mobile */}
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: t.navBg, backdropFilter: 'blur(16px)', borderTop: `1px solid ${t.border}`, padding: '10px 0 20px', display: 'flex', justifyContent: 'space-around', zIndex: 50 }}>
-          {([['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['▦','Stock','/stock'],['≋','Más','']] as [string,string,string][]).map(([ico, lbl, hr]) => (
+          {([['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['▦','Stock','/stock']] as [string,string,string][]).map(([ico, lbl, hr]) => (
             <div key={lbl} onClick={() => hr && router.push(hr)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
               <div style={{ fontSize: 18, color: lbl === 'Stock' ? t.accent : t.textFaint }}>{ico}</div>
               <div style={{ fontSize: 9, color: lbl === 'Stock' ? t.accent : t.textFaint, fontWeight: lbl === 'Stock' ? 700 : 400 }}>{lbl}</div>
               {lbl === 'Stock' && <div style={{ width: 4, height: 4, borderRadius: '50%', background: t.accent }} />}
             </div>
           ))}
+          <MenuMas t={t} dark={dark} />
         </div>
       )}
     </div>
