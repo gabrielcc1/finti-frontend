@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { Sidebar } from '@/components/shared/Sidebar'
+import { MenuMas } from '@/components/shared/MenuMas'
 import type { useVentas, ItemVenta, NuevaVentaData, NuevoClienteData, VentaConItems } from '@/hooks/useVentas'
 import { useComprobante } from '@/hooks/useComprobante'
 
@@ -17,20 +18,18 @@ interface VentasViewProps {
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
 const toFloat = (v: string | number | null | undefined) => parseFloat(String(v ?? 0)) || 0
-// Sin toLocaleString — evita hydration mismatch entre server y client en Next.js
 const formatPeso = (n: string | number | null | undefined) => {
   const num = toFloat(n)
   const parts = num.toFixed(2).split('.')
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   return `$${parts[0]},${parts[1]}`
 }
-// Sin toLocaleDateString — mismo motivo
 const formatFecha = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split('-')
   return `${d}/${m}/${y}`
 }
 
-// ── Temas (mismo que dashboard) ───────────────────────────────────────────────
+// ── Temas ─────────────────────────────────────────────────────────────────────
 const tema = {
   light: {
     bg:'#fafaf8', surface:'#ffffff', surfaceAlt:'#f5f5f2',
@@ -119,7 +118,6 @@ function FormNuevoClienteInline({
       flexDirection: 'column',
       gap: 10,
     }}>
-      {/* Encabezado del sub-formulario */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
         <div style={{
           width: 22, height: 22, borderRadius: 6,
@@ -132,97 +130,56 @@ function FormNuevoClienteInline({
         </span>
       </div>
 
-      {/* Fila 1: Nombre (ancho completo) */}
       <div>
         <label style={labelStyle}>Nombre *</label>
-        <input
-          type="text"
-          value={nombre}
-          onChange={e => setNombre(e.target.value)}
-          placeholder="Ej: María González"
-          style={inputStyle}
-          autoFocus
-        />
+        <input type="text" value={nombre} onChange={e => setNombre(e.target.value)}
+          placeholder="Ej: María González" style={inputStyle} autoFocus />
       </div>
 
-      {/* Fila 2: Teléfono + Zona comercial */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
           <label style={labelStyle}>Teléfono *</label>
-          <input
-            type="tel"
-            value={telefono}
-            onChange={e => setTelefono(e.target.value)}
-            placeholder="Ej: 11 2345-6789"
-            style={inputStyle}
-          />
+          <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)}
+            placeholder="Ej: 11 2345-6789" style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>Zona comercial *</label>
-          <input
-            type="text"
-            value={zonaComercial}
-            onChange={e => setZonaComercial(e.target.value)}
-            placeholder="Ej: Palermo, Centro..."
-            style={inputStyle}
-          />
+          <input type="text" value={zonaComercial} onChange={e => setZonaComercial(e.target.value)}
+            placeholder="Ej: Palermo, Centro..." style={inputStyle} />
         </div>
       </div>
 
-      {/* Fila 3: Dirección (ancho completo) */}
       <div>
         <label style={labelStyle}>Dirección <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional)</span></label>
-        <input
-          type="text"
-          value={direccion}
-          onChange={e => setDireccion(e.target.value)}
-          placeholder="Ej: Av. Corrientes 1234, piso 2"
-          style={inputStyle}
-        />
+        <input type="text" value={direccion} onChange={e => setDireccion(e.target.value)}
+          placeholder="Ej: Av. Corrientes 1234, piso 2" style={inputStyle} />
       </div>
 
-      {/* Fila 4: DNI + Email opcionales */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
           <label style={labelStyle}>DNI <span style={{ fontWeight: 400, textTransform: 'none' }}>(opc.)</span></label>
-          <input
-            type="text"
-            value={dni}
-            onChange={e => setDni(e.target.value)}
-            placeholder="Ej: 30123456"
-            style={inputStyle}
-          />
+          <input type="text" value={dni} onChange={e => setDni(e.target.value)}
+            placeholder="Ej: 30123456" style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>Email <span style={{ fontWeight: 400, textTransform: 'none' }}>(opc.)</span></label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="maria@email.com"
-            style={inputStyle}
-          />
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="maria@email.com" style={inputStyle} />
         </div>
       </div>
 
-      {/* Error de validación */}
       {errorLocal && (
         <div style={{ fontSize: 11, color: t.redNum, padding: '6px 10px', borderRadius: 7, background: t.red, border: `1px solid ${t.redBorder}` }}>
           ⚠️ {errorLocal}
         </div>
       )}
 
-      {/* Botones del sub-formulario */}
       <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-        <button
-          onClick={onCancelar}
-          style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: `1px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-        >
+        <button onClick={onCancelar}
+          style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: `1px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
           Cancelar
         </button>
-        <button
-          onClick={handleGuardar}
-          disabled={!puedeGuardar || saving}
+        <button onClick={handleGuardar} disabled={!puedeGuardar || saving}
           style={{
             flex: 2, padding: '8px 0', borderRadius: 9, border: 'none',
             background: puedeGuardar && !saving ? t.accent : t.surfaceAlt,
@@ -230,8 +187,7 @@ function FormNuevoClienteInline({
             fontSize: 12, fontWeight: 700,
             cursor: puedeGuardar && !saving ? 'pointer' : 'not-allowed',
             transition: 'all 0.15s',
-          }}
-        >
+          }}>
           {saving ? 'Guardando...' : '✓ Crear cliente'}
         </button>
       </div>
@@ -245,18 +201,17 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
   t: Tema; dark: boolean
   onClose: () => void
 }) {
-  const [clienteId,       setClienteId]       = useState<string>('')
-  const [items,           setItems]           = useState<ItemVenta[]>([])
-  const [descuento,       setDescuento]       = useState(0)
-  const [tipoPago,        setTipoPago]        = useState<NuevaVentaData['tipo_pago']>('efectivo')
-  const [cantCuotas,      setCantCuotas]      = useState(0)
+  const [clienteId,        setClienteId]        = useState<string>('')
+  const [items,            setItems]            = useState<ItemVenta[]>([])
+  const [descuento,        setDescuento]        = useState(0)
+  const [tipoPago,         setTipoPago]         = useState<NuevaVentaData['tipo_pago']>('efectivo')
+  const [cantCuotas,       setCantCuotas]       = useState(0)
   const [fechaPrimerCobro, setFechaPrimerCobro] = useState('')
-  const [notas,           setNotas]           = useState('')
-  const [busqueda,        setBusqueda]        = useState('')
-  const [exito,           setExito]           = useState(false)
-  // Control del sub-formulario de nuevo cliente
-  const [mostrarFormCliente, setMostrarFormCliente] = useState(false)
-  const [clienteRecienCreado, setClienteRecienCreado] = useState<string | null>(null)
+  const [notas,            setNotas]            = useState('')
+  const [busqueda,         setBusqueda]         = useState('')
+  const [exito,            setExito]            = useState(false)
+  const [mostrarFormCliente,     setMostrarFormCliente]     = useState(false)
+  const [clienteRecienCreado,    setClienteRecienCreado]    = useState<string | null>(null)
 
   const total     = items.reduce((s, i) => s + i.subtotal, 0) - descuento
   const prodsFilt = ventas.productos.filter(p =>
@@ -295,7 +250,6 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
 
   const quitarItem = (id: string | null) => setItems(prev => prev.filter(i => i.producto_id !== id))
 
-  // Crear cliente desde el flujo de venta y seleccionarlo automáticamente
   const handleCrearCliente = async (data: NuevoClienteData) => {
     const nuevoCliente = await ventas.crearCliente(data)
     setClienteId(nuevoCliente.id)
@@ -345,36 +299,19 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
           <label style={{ fontSize:11, fontWeight:700, color:t.textMuted, textTransform:'uppercase', letterSpacing:'0.04em' }}>
             Cliente
           </label>
-          {/* Botón toggle nuevo cliente */}
           {!mostrarFormCliente && (
             <button
               onClick={() => { setMostrarFormCliente(true); setClienteId('') }}
-              style={{
-                fontSize: 11, fontWeight: 700,
-                color: t.accent,
-                background: 'none', border: 'none',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '2px 0',
-              }}
-            >
+              style={{ fontSize: 11, fontWeight: 700, color: t.accent, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0' }}>
               + Nuevo cliente
             </button>
           )}
         </div>
 
-        {/* Selector de cliente existente */}
         {!mostrarFormCliente && (
           <div style={{ position: 'relative' }}>
-            <select
-              value={clienteId}
-              onChange={e => { setClienteId(e.target.value); setClienteRecienCreado(null) }}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 10,
-                border: `1.5px solid ${clienteRecienCreado ? t.accent : t.border}`,
-                background: t.bg, color: t.text, fontSize: 13, fontFamily: 'inherit', outline: 'none',
-              }}
-            >
+            <select value={clienteId} onChange={e => { setClienteId(e.target.value); setClienteRecienCreado(null) }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${clienteRecienCreado ? t.accent : t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: 'inherit', outline: 'none' }}>
               <option value="">Consumidor final</option>
               {ventas.clientes.map(c => (
                 <option key={c.id} value={c.id}>
@@ -382,29 +319,17 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
                 </option>
               ))}
             </select>
-            {/* Badge "recién creado" */}
             {clienteRecienCreado && clienteId === clienteRecienCreado && (
-              <div style={{
-                marginTop: 6, padding: '5px 10px', borderRadius: 7,
-                background: t.green, border: `1px solid ${t.greenBorder}`,
-                fontSize: 11, color: t.greenText, fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>
+              <div style={{ marginTop: 6, padding: '5px 10px', borderRadius: 7, background: t.green, border: `1px solid ${t.greenBorder}`, fontSize: 11, color: t.greenText, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 ✓ Cliente creado y seleccionado
               </div>
             )}
           </div>
         )}
 
-        {/* Sub-formulario inline: nuevo cliente */}
         {mostrarFormCliente && (
-          <FormNuevoClienteInline
-            t={t}
-            dark={dark}
-            saving={ventas.saving}
-            onGuardar={handleCrearCliente}
-            onCancelar={() => setMostrarFormCliente(false)}
-          />
+          <FormNuevoClienteInline t={t} dark={dark} saving={ventas.saving}
+            onGuardar={handleCrearCliente} onCancelar={() => setMostrarFormCliente(false)} />
         )}
       </div>
 
@@ -420,8 +345,7 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
                   <div key={p.id} onClick={() => agregarProducto(p)}
                     style={{ padding:'10px 14px', cursor:'pointer', borderBottom:`1px solid ${t.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}
                     onMouseEnter={e => (e.currentTarget.style.background = t.surfaceAlt)}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                     <div>
                       <div style={{ fontSize:13, fontWeight:600, color:t.text }}>{p.nombre}</div>
                       <div style={{ fontSize:10, color:t.textFaint }}>Stock: {p.stock_actual} {p.unidad}</div>
@@ -444,35 +368,33 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
             const sinStock  = stock !== null && stock === 0
             const stockColor = sinStock ? '#dc2626' : stockBajo ? '#d97706' : '#6b7280'
             return (
-            <div key={item.producto_id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, background:t.surfaceAlt, border:`1px solid ${t.border}` }}>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:t.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.nombre}</div>
-                <div style={{ fontSize:10, color:t.textMuted, display:'flex', alignItems:'center', gap:6 }}>
-                  <span>{formatPeso(item.precio)} c/u</span>
-                  {stock !== null && (
-                    <span style={{ color: stockColor, fontWeight: sinStock || stockBajo ? 700 : 400 }}>
-                      · Stock: {stock}{prod?.unidad ? ` ${prod.unidad}` : ''}
-                      {sinStock ? ' ⚠️' : stockBajo ? ' ↓' : ''}
-                    </span>
-                  )}
+              <div key={item.producto_id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, background:t.surfaceAlt, border:`1px solid ${t.border}` }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:t.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.nombre}</div>
+                  <div style={{ fontSize:10, color:t.textMuted, display:'flex', alignItems:'center', gap:6 }}>
+                    <span>{formatPeso(item.precio)} c/u</span>
+                    {stock !== null && (
+                      <span style={{ color: stockColor, fontWeight: sinStock || stockBajo ? 700 : 400 }}>
+                        · Stock: {stock}{prod?.unidad ? ` ${prod.unidad}` : ''}
+                        {sinStock ? ' ⚠️' : stockBajo ? ' ↓' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <button onClick={() => cambiarCantidad(item.producto_id, -1)}
+                    style={{ width:26, height:26, borderRadius:7, border:`1px solid ${t.border}`, background:t.surface, color:t.text, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                  <span style={{ fontSize:13, fontWeight:700, color:t.text, minWidth:20, textAlign:'center' }}>{item.cantidad}</span>
+                  <button onClick={() => cambiarCantidad(item.producto_id, 1)}
+                    style={{ width:26, height:26, borderRadius:7, border:`1px solid ${t.border}`, background:t.surface, color:t.text, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                </div>
+                <div style={{ fontSize:13, fontWeight:700, color:t.text, fontFamily:'monospace', minWidth:70, textAlign:'right' }}>{formatPeso(item.subtotal)}</div>
+                <button onClick={() => quitarItem(item.producto_id)}
+                  style={{ width:22, height:22, borderRadius:6, border:'none', background:t.red, color:t.redNum, cursor:'pointer', fontSize:11, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
               </div>
-              {/* Controles cantidad */}
-              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <button onClick={() => cambiarCantidad(item.producto_id, -1)}
-                  style={{ width:26, height:26, borderRadius:7, border:`1px solid ${t.border}`, background:t.surface, color:t.text, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                <span style={{ fontSize:13, fontWeight:700, color:t.text, minWidth:20, textAlign:'center' }}>{item.cantidad}</span>
-                <button onClick={() => cambiarCantidad(item.producto_id, 1)}
-                  style={{ width:26, height:26, borderRadius:7, border:`1px solid ${t.border}`, background:t.surface, color:t.text, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-              </div>
-              <div style={{ fontSize:13, fontWeight:700, color:t.text, fontFamily:'monospace', minWidth:70, textAlign:'right' }}>{formatPeso(item.subtotal)}</div>
-              <button onClick={() => quitarItem(item.producto_id)}
-                style={{ width:22, height:22, borderRadius:6, border:'none', background:t.red, color:t.redNum, cursor:'pointer', fontSize:11, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
-            </div>
             )
           })}
 
-          {/* Subtotal y descuento */}
           <div style={{ padding:'12px 14px', borderRadius:10, background:t.surface, border:`1px solid ${t.border}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
               <span style={{ fontSize:12, color:t.textMuted }}>Subtotal</span>
@@ -499,36 +421,30 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
           {(['efectivo','transferencia','tarjeta','cuotas'] as const).map(tp => (
             <button key={tp} onClick={() => setTipoPago(tp)}
               style={{ padding:'10px 0', borderRadius:10, border:`1.5px solid ${tipoPago===tp ? t.accent : t.border}`, background:tipoPago===tp ? (dark?'#2a2218':t.surfaceAlt) : t.surface, color:tipoPago===tp ? t.accent : t.textMuted, fontSize:12, fontWeight:tipoPago===tp?700:400, cursor:'pointer', transition:'all 0.15s' }}>
-              {tp === 'efectivo' ? '💵 Efectivo'
-               : tp === 'transferencia' ? '📲 Transferencia'
-               : tp === 'tarjeta' ? '💳 Tarjeta'
-               : '📋 Cuotas'}
+              {tp === 'efectivo' ? '💵 Efectivo' : tp === 'transferencia' ? '📲 Transferencia' : tp === 'tarjeta' ? '💳 Tarjeta' : '📋 Cuotas'}
             </button>
           ))}
         </div>
         {tipoPago === 'cuotas' && (
           <>
-          <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontSize:12, color:t.textMuted, flexShrink:0 }}>Cantidad de cuotas:</span>
-            <input
-              type="number" min="1" max="60"
-              value={cantCuotas || ''}
-              onChange={e => setCantCuotas(Math.max(1, parseInt(e.target.value) || 1))}
-              placeholder="Ej: 3"
-              style={{ width:90, padding:'7px 10px', borderRadius:9, border:`1.5px solid ${t.border}`, background:t.bg, color:t.text, fontSize:13, fontFamily:'inherit', outline:'none', boxSizing:'border-box' as const }}
-            />
-            {cantCuotas > 0 && total > 0 && (
-              <span style={{ fontSize:11, color:t.textMuted }}>
-                → <strong style={{ color:t.text, fontFamily:'monospace' }}>{cantCuotas}</strong> × {formatPeso((total - descuento) / cantCuotas)}
-              </span>
-            )}
-          </div>
-          <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:10 }}>
-            <span style={{ fontSize:12, color:t.textMuted, flexShrink:0 }}>📅 Fecha 1° cobro:</span>
-            <input type="date" value={fechaPrimerCobro} onChange={e => setFechaPrimerCobro(e.target.value)}
-              style={{ padding:'7px 10px', borderRadius:9, border:`1.5px solid ${t.border}`, background:t.bg, color:t.text, fontSize:13, outline:'none' }} />
-            <span style={{ fontSize:10, color:t.textFaint }}>opcional · por defecto mes siguiente</span>
-          </div>
+            <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:12 }}>
+              <span style={{ fontSize:12, color:t.textMuted, flexShrink:0 }}>Cantidad de cuotas:</span>
+              <input type="number" min="1" max="60" value={cantCuotas || ''}
+                onChange={e => setCantCuotas(Math.max(1, parseInt(e.target.value) || 1))}
+                placeholder="Ej: 3"
+                style={{ width:90, padding:'7px 10px', borderRadius:9, border:`1.5px solid ${t.border}`, background:t.bg, color:t.text, fontSize:13, fontFamily:'inherit', outline:'none', boxSizing:'border-box' as const }} />
+              {cantCuotas > 0 && total > 0 && (
+                <span style={{ fontSize:11, color:t.textMuted }}>
+                  → <strong style={{ color:t.text, fontFamily:'monospace' }}>{cantCuotas}</strong> × {formatPeso((total - descuento) / cantCuotas)}
+                </span>
+              )}
+            </div>
+            <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:12, color:t.textMuted, flexShrink:0 }}>📅 Fecha 1° cobro:</span>
+              <input type="date" value={fechaPrimerCobro} onChange={e => setFechaPrimerCobro(e.target.value)}
+                style={{ padding:'7px 10px', borderRadius:9, border:`1.5px solid ${t.border}`, background:t.bg, color:t.text, fontSize:13, outline:'none' }} />
+              <span style={{ fontSize:10, color:t.textFaint }}>opcional · por defecto mes siguiente</span>
+            </div>
           </>
         )}
       </div>
@@ -541,7 +457,6 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
           style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:`1.5px solid ${t.border}`, background:t.bg, color:t.text, fontSize:13, fontFamily:'inherit', outline:'none', resize:'none', boxSizing:'border-box' as const }} />
       </div>
 
-      {/* Botones */}
       <div style={{ display:'flex', gap:10 }}>
         <button onClick={onClose}
           style={{ flex:1, padding:13, borderRadius:12, border:`1.5px solid ${t.border}`, background:t.surfaceAlt, color:t.textMuted, fontSize:13, fontWeight:600, cursor:'pointer' }}>
@@ -557,12 +472,18 @@ function FormNuevaVenta({ ventas, t, dark, onClose }: {
 }
 
 // ── LISTA DE VENTAS ───────────────────────────────────────────────────────────
+// FIX: Se mejoró el layout de cada fila para que el nombre del cliente
+// sea visible en mobile. Se reemplazó el layout horizontal comprimido
+// por un layout de dos líneas: nombre + fecha arriba, badge + monto abajo.
 function ListaVentas({ ventas, t, negocio }: { ventas: ReturnType<typeof useVentas>; t: Tema; negocio: { nombre: string } }) {
   const comprobante = useComprobante({ nombre: negocio.nombre })
+
   if (ventas.loading) return (
     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
       {[1,2,3,4,5].map(i => (
-        <div key={i} style={{ height:64, borderRadius:12, background:t.surfaceAlt, animation:'shimmer 1.4s infinite' }} />
+        <div key={i} style={{ height:72, borderRadius:12, background:t.surfaceAlt, overflow:'hidden', position:'relative' }}>
+          <div style={{ position:'absolute', inset:0, background:`linear-gradient(90deg,transparent,${t.surface},transparent)`, animation:'shimmer 1.4s infinite' }} />
+        </div>
       ))}
     </div>
   )
@@ -587,38 +508,73 @@ function ListaVentas({ ventas, t, negocio }: { ventas: ReturnType<typeof useVent
       {ventas.ventas.map(v => {
         const col = coloresPago[v.tipo_pago ?? 'efectivo'] ?? coloresPago.efectivo
         const cliente = v.clientes?.nombre ?? 'Consumidor final'
+        const iniciales = cliente.split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase()
+
         return (
-          <div key={v.id} style={{ padding:'12px 14px', borderRadius:13, background:t.surface, border:`1px solid ${t.border}`, boxShadow:t.shadow, display:'flex', alignItems:'center', gap:12 }}>
-            {/* Avatar */}
-            <div style={{ width:38, height:38, borderRadius:10, background:t.surfaceAlt, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:t.textMuted, flexShrink:0 }}>
-              {cliente.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
-            </div>
-            {/* Info */}
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:t.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{cliente}</div>
-              <div style={{ fontSize:10, color:t.textFaint }}>
-                {formatFecha(v.fecha)} · {v.venta_items?.length ?? 0} items
+          // FIX NOMBRE: Nuevo layout en dos líneas para que el nombre sea siempre visible
+          <div key={v.id} style={{
+            padding:'12px 14px', borderRadius:13,
+            background:t.surface, border:`1px solid ${t.border}`,
+            boxShadow:t.shadow,
+          }}>
+            {/* Fila 1: Avatar + Nombre completo + Botón PDF */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+              {/* Avatar con iniciales */}
+              <div style={{
+                width:36, height:36, borderRadius:10, flexShrink:0,
+                background:t.surfaceAlt, border:`1px solid ${t.border}`,
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:11, fontWeight:700, color:t.textMuted,
+              }}>
+                {iniciales}
               </div>
+
+              {/* Nombre — ahora tiene todo el espacio disponible */}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{
+                  fontSize:14, fontWeight:700, color:t.text,
+                  // Sin truncado: se muestra completo, wrappea si es muy largo
+                  wordBreak:'break-word',
+                  lineHeight:1.3,
+                }}>
+                  {cliente}
+                </div>
+                <div style={{ fontSize:10, color:t.textFaint, marginTop:2 }}>
+                  {formatFecha(v.fecha)} · {v.venta_items?.length ?? 0} item{(v.venta_items?.length ?? 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
+
+              {/* Botón comprobante PDF */}
+              <button
+                onClick={() => comprobante.descargarComprobanteVenta(v as VentaConItems)}
+                disabled={comprobante.generando}
+                title="Descargar comprobante PDF"
+                style={{
+                  flexShrink:0, width:30, height:30, borderRadius:8,
+                  border:`1px solid ${t.border}`, background:t.surfaceAlt,
+                  color:t.textMuted, cursor:'pointer', fontSize:14,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  opacity: comprobante.generando ? 0.5 : 1,
+                }}>
+                {comprobante.generando ? '⏳' : '⬇'}
+              </button>
             </div>
-            {/* Pago badge */}
-            <span style={{ fontSize:9, fontWeight:700, padding:'3px 8px', borderRadius:20, background:col.bg, color:col.color, flexShrink:0 }}>{col.label}</span>
-            {/* Total */}
-            <div style={{ fontSize:14, fontWeight:800, color:t.text, fontFamily:'monospace', flexShrink:0 }}>{formatPeso(v.total)}</div>
-            {/* Botón comprobante */}
-            <button
-              onClick={() => comprobante.descargarComprobanteVenta(v as VentaConItems)}
-              disabled={comprobante.generando}
-              title="Descargar comprobante PDF"
-              style={{
-                flexShrink: 0, width: 30, height: 30, borderRadius: 8,
-                border: `1px solid ${t.border}`, background: t.surfaceAlt,
-                color: t.textMuted, cursor: 'pointer', fontSize: 14,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: comprobante.generando ? 0.5 : 1,
-              }}
-            >
-              {comprobante.generando ? '⏳' : '⬇'}
-            </button>
+
+            {/* Fila 2: Badge de pago + Monto */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingLeft:46 }}>
+              <span style={{
+                fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:20,
+                background:col.bg, color:col.color,
+              }}>
+                {col.label}
+              </span>
+              <span style={{
+                fontSize:16, fontWeight:800, color:t.text,
+                fontFamily:"'DM Mono', monospace",
+              }}>
+                {formatPeso(v.total)}
+              </span>
+            </div>
           </div>
         )
       })}
@@ -627,12 +583,12 @@ function ListaVentas({ ventas, t, negocio }: { ventas: ReturnType<typeof useVent
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// VENTAS VIEW PRINCIPAL — responsive automático
+// VENTAS VIEW PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════════════
 export function VentasView({ usuario, ventas }: VentasViewProps) {
-  const [dark,       setDark]       = useDarkMode()
-  const [isMobile,   setIsMobile]   = useState(false)
-  const [showForm,   setShowForm]   = useState(false)
+  const [dark,     setDark]     = useDarkMode()
+  const [isMobile, setIsMobile] = useState(false)
+  const [showForm, setShowForm] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -642,15 +598,14 @@ export function VentasView({ usuario, ventas }: VentasViewProps) {
   }, [])
 
   const t = dark ? tema.dark : tema.light
+  const router = useRouter()
 
   const kpis = [
-    { label:'Total mes',      value: formatPeso(ventas.resumen.totalMes),    icon:'📦', color: t.accent },
-    { label:'Ventas',         value: String(ventas.resumen.cantidadMes),      icon:'🛒', color: '#4ade80' },
-    { label:'Efectivo',       value: formatPeso(ventas.resumen.efectivo),     icon:'💵', color: t.accent },
-    { label:'En cuotas',      value: formatPeso(ventas.resumen.cuotas),       icon:'📋', color: t.amberSub },
+    { label:'Total mes',   value: formatPeso(ventas.resumen.totalMes),    icon:'📦' },
+    { label:'Ventas',      value: String(ventas.resumen.cantidadMes),      icon:'🛒' },
+    { label:'Efectivo',    value: formatPeso(ventas.resumen.efectivo),     icon:'💵' },
+    { label:'En cuotas',   value: formatPeso(ventas.resumen.cuotas),       icon:'📋' },
   ]
-
-  const router = useRouter()
 
   const sidebar = (
     <Sidebar activo="ventas" usuario={usuario} dark={dark} setDark={setDark} t={t} />
@@ -662,13 +617,14 @@ export function VentasView({ usuario, ventas }: VentasViewProps) {
       {/* Topbar */}
       <div style={{ height:54, background:t.surface, borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', padding:'0 20px', flexShrink:0 }}>
         {isMobile && (
-          <button onClick={()=>router.push('/dashboard')} style={{ marginRight:12, background:'none', border:'none', color:t.textMuted, cursor:'pointer', fontSize:18 }}>←</button>
+          <button onClick={() => router.push('/dashboard')}
+            style={{ marginRight:12, background:'none', border:'none', color:t.textMuted, cursor:'pointer', fontSize:18 }}>←</button>
         )}
         <div>
           <div style={{ fontSize:13, fontWeight:700, color:t.text }}>Ventas</div>
           <div style={{ fontSize:10, color:t.textMuted }}>{ventas.resumen.cantidadMes} ventas este mes</div>
         </div>
-        <button onClick={()=>setShowForm(true)}
+        <button onClick={() => setShowForm(true)}
           style={{ marginLeft:'auto', padding:'8px 16px', borderRadius:10, border:'none', background:t.accent, color:t.accentText, fontSize:13, fontWeight:800, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
           ＋ Nueva venta
         </button>
@@ -688,24 +644,38 @@ export function VentasView({ usuario, ventas }: VentasViewProps) {
       </div>
 
       {/* Lista */}
-      <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', paddingBottom: isMobile ? 80 : 20 }}>
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', paddingBottom: isMobile ? 90 : 20 }}>
         <div style={{ fontSize:12, fontWeight:700, color:t.textMuted, marginBottom:12, textTransform:'uppercase', letterSpacing:'0.04em' }}>
           Ventas del mes
         </div>
         <ListaVentas ventas={ventas} t={t} negocio={{ nombre: usuario.negocio }} />
       </div>
 
-      {/* Bottom nav mobile */}
+      {/* Bottom nav mobile — FIX: ahora usa el componente MenuMas */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:t.navBg, backdropFilter:'blur(16px)', borderTop:`1px solid ${t.border}`, padding:'10px 0 20px', display:'flex', justifyContent:'space-around', zIndex:50 }}>
-          {[['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['▦','Stock','/stock'],['≋','Más','']].map(([icon,label,href])=>(
-            <div key={label} onClick={()=>href&&router.push(href)}
+        <div style={{
+          position:'fixed', bottom:0, left:0, right:0,
+          background:t.navBg, backdropFilter:'blur(16px)',
+          borderTop:`1px solid ${t.border}`,
+          padding:'10px 0 20px',
+          display:'flex', justifyContent:'space-around',
+          zIndex:50,
+        }}>
+          {([
+            ['⊞','Inicio',  '/dashboard'],
+            ['↗','Ventas',  '/ventas'],
+            ['◎','Cobros',  '/cobranzas'],
+            ['▦','Stock',   '/stock'],
+          ] as [string,string,string][]).map(([icon,label,href]) => (
+            <div key={label} onClick={() => router.push(href)}
               style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, cursor:'pointer' }}>
               <div style={{ fontSize:18, color:label==='Ventas'?t.accent:t.textFaint }}>{icon}</div>
               <div style={{ fontSize:9, color:label==='Ventas'?t.accent:t.textFaint, fontWeight:label==='Ventas'?700:400 }}>{label}</div>
               {label==='Ventas' && <div style={{ width:4, height:4, borderRadius:'50%', background:t.accent }} />}
             </div>
           ))}
+          {/* FIX: Menú "Más" como componente propio con estado local */}
+          <MenuMas t={t} dark={dark} />
         </div>
       )}
     </div>
@@ -713,9 +683,10 @@ export function VentasView({ usuario, ventas }: VentasViewProps) {
 
   return (
     <>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
       <style>{`
         @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+        @keyframes popIn{from{opacity:0;transform:scale(0.93)}to{opacity:1;transform:scale(1)}}
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:4px;}
         ::-webkit-scrollbar-thumb{background:#33302a;border-radius:4px;}
@@ -728,13 +699,26 @@ export function VentasView({ usuario, ventas }: VentasViewProps) {
 
       {/* Modal nueva venta */}
       {showForm && (
-        <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', display:'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent:'center', padding: isMobile ? 0 : 20 }}>
-          <div style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius: isMobile ? '20px 20px 0 0' : 20, padding:'24px 20px', width:'100%', maxWidth: isMobile ? '100%' : 480, maxHeight: isMobile ? '92vh' : '90vh', overflowY:'auto', boxShadow:t.shadowMd }}>
+        <div style={{
+          position:'fixed', inset:0, zIndex:200,
+          background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)',
+          display:'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent:'center',
+          padding: isMobile ? 0 : 20,
+        }}>
+          <div style={{
+            background:t.surface, border:`1px solid ${t.border}`,
+            borderRadius: isMobile ? '20px 20px 0 0' : 20,
+            padding:'24px 20px', width:'100%',
+            maxWidth: isMobile ? '100%' : 480,
+            maxHeight: isMobile ? '92vh' : '90vh',
+            overflowY:'auto', boxShadow:t.shadowMd,
+          }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
               <div style={{ fontSize:16, fontWeight:800, color:t.text }}>Nueva venta</div>
-              <button onClick={()=>setShowForm(false)} style={{ width:28, height:28, borderRadius:8, border:`1px solid ${t.border}`, background:t.surfaceAlt, color:t.textMuted, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+              <button onClick={() => setShowForm(false)}
+                style={{ width:28, height:28, borderRadius:8, border:`1px solid ${t.border}`, background:t.surfaceAlt, color:t.textMuted, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
             </div>
-            <FormNuevaVenta ventas={ventas} t={t} dark={dark} onClose={()=>setShowForm(false)} />
+            <FormNuevaVenta ventas={ventas} t={t} dark={dark} onClose={() => setShowForm(false)} />
           </div>
         </div>
       )}
