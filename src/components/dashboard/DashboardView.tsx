@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/shared/Sidebar'
 import { BuscadorGlobal } from '@/components/shared/BuscadorGlobal'
 import { useRouter, usePathname } from 'next/navigation'
 import type { useDashboard } from '@/hooks/useDashboard'
+import { BannerInstalacion } from '@/components/shared/BannerInstalacion'
 import type { usePedidos } from '@/hooks/usePedidos'
 
 interface UsuarioInfo { nombre: string; negocio: string; tier: string; avatar: string }
@@ -191,6 +192,8 @@ function MobileView({ usuario, dashboard, pedidos, dark, setDark, t, setModalCuo
         </div>
       </div>
       <div style={{padding:'0 20px',display:'flex',flexDirection:'column',gap:12}}>
+        {/* Banner instalación PWA — solo aparece en mobile si no está instalada */}
+        <BannerInstalacion />
         {dashboard.loading?<Skeleton h={120} radius={20} t={t} />:(
           <div style={{background:t.hero,borderRadius:20,padding:'18px 20px',boxShadow:t.shadowMd}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>

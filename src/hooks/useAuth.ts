@@ -12,9 +12,6 @@ const db = (supabase: ReturnType<typeof createClient>) => supabase as any
 type Negocio = Database['public']['Tables']['negocios']['Row']
 type Perfil  = Database['public']['Tables']['usuarios']['Row']
 
-interface NegocioInsertLocal { nombre: string; tier: 'free' | 'pro' | 'business' }
-interface UsuarioInsertLocal { id: string; negocio_id: string; rol: 'owner' | 'empleado' | 'contador' }
-
 interface UsuarioConNegocio {
   user:    User | null
   perfil:  Perfil | null
@@ -36,7 +33,6 @@ export function useAuth(): UsuarioConNegocio & {
 
   const supabase = createClient()
 
-  // Carga perfil y negocio del usuario autenticado
   const cargarPerfil = useCallback(async (userId: string): Promise<void> => {
     const { data: perfilData } = await db(supabase)
       .from('usuarios')
@@ -60,7 +56,6 @@ export function useAuth(): UsuarioConNegocio & {
   }, [supabase])
 
   useEffect(() => {
-    // Sesión inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -70,7 +65,6 @@ export function useAuth(): UsuarioConNegocio & {
       }
     })
 
-    // Listener de cambios de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -93,7 +87,6 @@ export function useAuth(): UsuarioConNegocio & {
     if (err) {
       setError(err.message)
       throw err
-      
     }
     await supabase.auth.getSession()
   }, [supabase])
@@ -105,36 +98,51 @@ export function useAuth(): UsuarioConNegocio & {
   ): Promise<void> => {
     setError(null)
 
-    // 1. Crear usuario en Supabase Auth
-    const { data: authData, error: errAuth } = await supabase.auth.signUp({ email, password })
+    // ── PASO 1: Crear usuario en Supabase Auth ──────────────────────────────
+    const { data: authData, error: errAuth } = await supabase.auth.signUp({
+      email,
+      password,
+    })
+
     if (errAuth || !authData.user) {
-      setError(errAuth?.message ?? 'Error al registrar')
-      throw errAuth
+      const msg = errAuth?.message ?? 'Error al registrar el usuario'
+      setError(msg)
+      throw new Error(msg)
     }
 
     const userId = authData.user.id
 
-    // 2. Crear negocio
-    const negocioInsert: NegocioInsertLocal = { nombre: nombreNegocio, tier: 'free' }
-    const { data: negocioData, error: errNegocio } = await db(supabase)
-      .from('negocios')
-      .insert(negocioInsert)
-      .select()
-      .single()
+    // ── PASO 2: Crear negocio + usuario via función RPC ─────────────────────
+    //
+    // No hacemos INSERT directo porque en el momento del signUp la sesión
+    // autenticada puede no estar disponible → RLS bloquea con error 42501.
+    //
+    // La función `crear_negocio_y_usuario` (definida en fix_rls_definitivo.sql)
+    // usa SECURITY DEFINER para ejecutarse con permisos elevados.
 
-    if (errNegocio || !negocioData) {
-      setError(errNegocio?.message ?? 'Error al crear negocio')
-      throw errNegocio
+    const { data: rpcData, error: errRpc } = await db(supabase)
+      .rpc('crear_negocio_y_usuario', {
+        p_nombre_negocio: nombreNegocio.trim(),
+        p_user_id:        userId,
+      })
+
+    if (errRpc) {
+      console.error('Error RPC:', JSON.stringify(errRpc))
+      const msg = errRpc?.message ?? `Error al configurar el negocio (${errRpc?.code ?? 'desconocido'})`
+      setError(msg)
+      throw new Error(msg)
     }
 
-    // 3. Crear perfil de usuario
-    const usuarioInsert: UsuarioInsertLocal = {
-      id:         userId,
-      negocio_id: (negocioData as Negocio).id,
-      rol:        'owner',
-    }
-    await db(supabase).from('usuarios').insert(usuarioInsert)
+    const resultado = rpcData as { ok: boolean; error?: string; negocio_id?: string }
 
+    if (!resultado?.ok) {
+      const msg = resultado?.error ?? 'Error al crear el negocio'
+      console.error('Error en función RPC:', msg)
+      setError(msg)
+      throw new Error(msg)
+    }
+
+    // El onAuthStateChange se encarga de cargar el perfil automáticamente
   }, [supabase])
 
   const signOut = useCallback(async (): Promise<void> => {
