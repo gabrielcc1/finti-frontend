@@ -1,60 +1,67 @@
 'use client'
 
 // src/components/shared/MenuMas.tsx
-// Menú "Más" para el bottom nav mobile — compatible con el tema de cualquier módulo.
-// Se extrajo acá para evitar dependencias cruzadas entre módulos y errores de tipos.
+// Menú "Más" del bottom nav mobile — compartido entre todos los módulos.
+// Uso: <MenuMas t={t} dark={dark} />
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-// Solo las propiedades que MenuMas realmente necesita.
-// Así es compatible con el tema de StockView, CostosView, VentasView, etc.
-interface TemaMinimo {
-  surface:    string
+interface Tema {
+  surface: string
   surfaceAlt: string
-  border:     string
-  text:       string
-  textMuted:  string
-  textFaint:  string
-  accent:     string
+  border: string
+  text: string
+  textMuted: string
+  textFaint: string
+  accent: string
   accentText: string
-  green:      string
+  amber: string
+  amberBorder: string
+  amberSub: string
+  green: string
   greenBorder: string
-  amber:      string
-  amberSub:   string
-  shadowMd?:  string  // opcional — no todos los temas lo tienen con ese nombre
+  greenText: string
+  shadowMd: string
+  navBg: string
 }
 
 interface MenuMasProps {
-  t:    TemaMinimo
+  t: Tema
   dark: boolean
+  // Módulo activo actual (para no resaltarlo como si fuera destino)
+  moduloActivo?: string
 }
 
-export function MenuMas({ t, dark }: MenuMasProps) {
-  const [showMenu, setShowMenu] = useState(false)
+export function MenuMas({ t, dark, moduloActivo }: MenuMasProps) {
+  const [open, setOpen] = useState(false)
   const router = useRouter()
 
-  const shadowMd = t.shadowMd ?? '0 4px 16px rgba(0,0,0,0.12)'
+  const ir = (href: string) => {
+    setOpen(false)
+    router.push(href)
+  }
 
   return (
     <>
-      {/* Botón del nav */}
+      {/* Botón ≋ Más en el bottom nav */}
       <div
-        onClick={() => setShowMenu(true)}
-        style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, cursor:'pointer' }}>
-        <div style={{ fontSize:18, color:t.textFaint }}>≋</div>
-        <div style={{ fontSize:9, color:t.textFaint, fontWeight:400 }}>Más</div>
+        onClick={() => setOpen(true)}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}
+      >
+        <div style={{ fontSize: 18, color: t.textFaint }}>≋</div>
+        <div style={{ fontSize: 9, color: t.textFaint, fontWeight: 400 }}>Más</div>
       </div>
 
-      {/* Sheet modal */}
-      {showMenu && (
+      {/* Overlay + sheet */}
+      {open && (
         <div
           style={{
-            position:'fixed', inset:0, zIndex:1000,
-            background:'rgba(0,0,0,0.45)', backdropFilter:'blur(4px)',
-            display:'flex', alignItems:'flex-end', justifyContent:'center',
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
           }}
-          onClick={() => setShowMenu(false)}
+          onClick={() => setOpen(false)}
         >
           <div
             onClick={e => e.stopPropagation()}
@@ -63,76 +70,72 @@ export function MenuMas({ t, dark }: MenuMasProps) {
               border: `1px solid ${t.border}`,
               borderRadius: '22px 22px 0 0',
               padding: '20px 20px 36px',
-              maxWidth: 480,
               width: '100%',
-              boxShadow: shadowMd,
+              boxShadow: t.shadowMd,
               animation: 'popIn 0.18s ease',
             }}
           >
-            {/* Handle visual */}
-            <div style={{ width:36, height:4, borderRadius:2, background:t.border, margin:'0 auto 18px' }} />
+            {/* Handle */}
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: t.border, margin: '0 auto 18px' }} />
+            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 14 }}>Módulos</div>
 
-            <div style={{ fontSize:14, fontWeight:800, color:t.text, marginBottom:14 }}>
-              Módulos adicionales
-            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
 
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {[
-                { label:'💸 Costos',   href:'/costos',    bg:t.amber,      color:t.amberSub         },
-                { label:'📊 Contable', href:'/contable',  bg:'#1d4ed8',    color:'#ffffff'           },
-                { label:'👤 Personal', href:'/personal',  bg:t.green,      color: dark ? '#4ade80' : '#166534' },
-                { label:'📦 Pedidos',  href:'/pedidos',   bg:t.surfaceAlt, color:t.text              },
-                { label:'🛒 Ventas',   href:'/ventas',    bg:t.surfaceAlt, color:t.text              },
-                { label:'◎ Cobros',    href:'/cobranzas', bg:t.surfaceAlt, color:t.text              },
-              ].map(item => (
-                <button
-                  key={item.label}
-                  onClick={() => { setShowMenu(false); router.push(item.href) }}
-                  style={{
-                    padding: '13px 16px',
-                    borderRadius: 12,
-                    border: 'none',
-                    background: item.bg,
-                    color: item.color,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    textAlign: 'left' as const,
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
+              <button onClick={() => ir('/clientes')}
+                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${t.border}`, background: t.surfaceAlt, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>👥</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>Clientes</div>
+                  <div style={{ fontSize: 10, color: t.textMuted }}>Base de datos</div>
+                </div>
+              </button>
 
-              <button
-                onClick={() => setShowMenu(false)}
-                style={{
-                  marginTop: 4,
-                  padding: '11px',
-                  borderRadius: 12,
-                  border: `1.5px solid ${t.border}`,
-                  background: t.surfaceAlt,
-                  color: t.textMuted,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
-                Cerrar
+              <button onClick={() => ir('/pedidos')}
+                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${t.border}`, background: t.surfaceAlt, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>📦</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>Pedidos</div>
+                  <div style={{ fontSize: 10, color: t.textMuted }}>Entregas</div>
+                </div>
+              </button>
+
+              <button onClick={() => ir('/costos')}
+                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${t.amberBorder}`, background: t.amber, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>💸</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.amberSub }}>Costos</div>
+                  <div style={{ fontSize: 10, color: t.amberSub, opacity: 0.75 }}>Rentabilidad</div>
+                </div>
+              </button>
+
+              <button onClick={() => ir('/contable')}
+                style={{ padding: '13px 12px', borderRadius: 13, border: '1px solid #bfdbfe', background: '#eff6ff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>📊</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>Contable</div>
+                  <div style={{ fontSize: 10, color: '#1d4ed8', opacity: 0.75 }}>Estados</div>
+                </div>
+              </button>
+
+              <button onClick={() => ir('/personal')}
+                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${t.greenBorder}`, background: t.green, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>◉</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.greenText }}>Personal</div>
+                  <div style={{ fontSize: 10, color: t.greenText, opacity: 0.75 }}>Mis finanzas</div>
+                </div>
               </button>
             </div>
+
+            <button
+              onClick={() => setOpen(false)}
+              style={{ marginTop: 14, width: '100%', padding: '12px', borderRadius: 12, border: `1.5px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes popIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0);    }
-        }
-      `}</style>
     </>
   )
 }
