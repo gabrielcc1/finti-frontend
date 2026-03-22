@@ -100,15 +100,6 @@ export function MenuMas({ t, dark }: MenuMasProps) {
                 </div>
               </button>
 
-              <button onClick={() => ir('/registro')}
-                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${t.border}`, background: t.surfaceAlt, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
-                <span style={{ fontSize: 22, flexShrink: 0 }}>📝</span>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>Registro</div>
-                  <div style={{ fontSize: 10, color: t.textMuted }}>Actividad</div>
-                </div>
-              </button>
-
             </div>
 
             <button onClick={() => setOpen(false)}
