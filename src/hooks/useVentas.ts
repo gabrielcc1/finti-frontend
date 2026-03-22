@@ -257,5 +257,8 @@ export function useVentas() {
     loading, saving, error,
     registrarVenta, crearCliente,
     refetch: fetchVentas,
+    // Expuesto para que VentasView pueda refrescar la lista de clientes
+    // al abrir el modal de nueva venta, evitando que aparezcan clientes eliminados
+    refetchClientes: fetchFormData,
   }
 }

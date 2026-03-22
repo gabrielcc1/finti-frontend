@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { id: 'dashboard',  label: 'Dashboard',  icon: '⊞', href: '/dashboard'  },
   { id: 'ventas',     label: 'Ventas',      icon: '↗', href: '/ventas'     },
   { id: 'cobranzas',  label: 'Cobranzas',   icon: '◎', href: '/cobranzas'  },
+  { id: 'clientes', label: 'Clientes', icon: '👥', href: '/clientes' },
   { id: 'pedidos',    label: 'Pedidos',     icon: '📦', href: '/pedidos'    },
   { id: 'stock',      label: 'Stock',       icon: '▦', href: '/stock'      },
   { id: 'costos',     label: 'Costos',      icon: '📊', href: '/costos'     },

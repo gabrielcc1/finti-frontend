@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { Sidebar } from '@/components/shared/Sidebar'
-import { BuscadorGlobal } from '@/components/shared/BuscadorGlobal'
+import { BuscadorGlobal, ModalBusqueda } from '@/components/shared/BuscadorGlobal'
 import { useRouter, usePathname } from 'next/navigation'
 import type { useDashboard } from '@/hooks/useDashboard'
 import { BannerInstalacion } from '@/components/shared/BannerInstalacion'
@@ -177,6 +177,7 @@ function MobileView({ usuario, dashboard, pedidos, dark, setDark, t, setModalCuo
   const router = useRouter()
   const pathname = usePathname()
   const [showMenu, setShowMenu] = useState(false)
+   const [showBuscador, setShowBuscador] = useState(false)
   return (
     <div style={{height:'100vh',overflowY:'auto',background:t.bg,paddingBottom:80}}>
       <div style={{padding:'52px 20px 16px',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
@@ -185,10 +186,19 @@ function MobileView({ usuario, dashboard, pedidos, dark, setDark, t, setModalCuo
           <div style={{fontSize:21,fontWeight:800,color:t.text,letterSpacing:'-0.4px'}}>Hola, {usuario.nombre} 👋</div>
           <div style={{fontSize:11,color:t.textMuted}}>{usuario.negocio}</div>
         </div>
-        <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4}}>
+        <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4,flexShrink:0}}>
           <ConexionDot status={dashboard.conexion} />
-          <button onClick={()=>setDark(!dark)} style={{width:32,height:32,borderRadius:9,border:`1px solid ${t.border}`,background:t.surface,cursor:'pointer',color:t.textMuted,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center'}}>{dark?'☀':'☾'}</button>
-          <div style={{width:32,height:32,borderRadius:9,background:t.accent,display:'flex',alignItems:'center',justifyContent:'center',color:t.accentText,fontSize:10,fontWeight:800}}>{usuario.avatar}</div>
+          <button onClick={()=>setDark(!dark)} style={{width:32,height:32,borderRadius:9,border:`1px solid ${t.border}`,background:t.surface,cursor:'pointer',color:t.textMuted,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            {dark?'☀':'☾'}
+          </button>
+          <button onClick={()=>setShowBuscador(true)} style={{width:32,height:32,borderRadius:9,border:`1px solid ${t.border}`,background:t.surface,cursor:'pointer',color:t.textMuted,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            🔍
+          </button>
+          <div onClick={()=>router.push('/perfil')} title="Ver perfil" style={{cursor:'pointer',flexShrink:0}}>
+            <div style={{width:32,height:32,borderRadius:9,background:t.accent,display:'flex',alignItems:'center',justifyContent:'center',color:t.accentText,fontSize:10,fontWeight:800}}>
+              {usuario.avatar}
+            </div>
+          </div>
         </div>
       </div>
       <div style={{padding:'0 20px',display:'flex',flexDirection:'column',gap:12}}>
@@ -262,22 +272,64 @@ function MobileView({ usuario, dashboard, pedidos, dark, setDark, t, setModalCuo
           </div>
         ))}
       </div>
-
       {showMenu && (
-        <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-          <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:22,padding:'28px 24px',maxWidth:340,width:'100%',boxShadow:t.shadowMd,animation:'popIn 0.18s ease',marginBottom:40}}>
-            <div style={{fontSize:16,fontWeight:800,color:t.text,marginBottom:18}}>Módulos adicionales</div>
-            <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <button onClick={()=>{setShowMenu(false);router.push('/costos')}} style={{padding:'12px',borderRadius:12,border:'none',background:t.amber,color:t.amberText,fontSize:13,fontWeight:700,cursor:'pointer'}}>💸 Costos</button>
-              <button onClick={()=>{setShowMenu(false);router.push('/contable')}} style={{padding:'12px',borderRadius:12,border:'none',background:'#1d4ed8',color:'#0c0a0a',fontSize:13,fontWeight:700,cursor:'pointer'}}>📊 Contable</button>
-              <button onClick={()=>{setShowMenu(false);router.push('/personal')}} style={{padding:'12px',borderRadius:12,border:'none',background:t.green,color:t.greenText,fontSize:13,fontWeight:700,cursor:'pointer'}}>👥 Personal</button>
-              <button onClick={()=>{setShowMenu(false);router.push('/registro')}} style={{padding:'12px',borderRadius:12,border:'none',background:t.surfaceAlt,color:t.text,fontSize:13,fontWeight:700,cursor:'pointer'}}>📝 Registro</button>
-              <button onClick={()=>{setShowMenu(false);router.push('/ventas')}} style={{padding:'12px',borderRadius:12,border:'none',background:t.accent,color:t.accentText,fontSize:13,fontWeight:700,cursor:'pointer'}}>🛒 Ventas</button>
-              <button onClick={()=>setShowMenu(false)} style={{marginTop:10,padding:'10px',borderRadius:12,border:`1.5px solid ${t.border}`,background:t.surfaceAlt,color:t.textMuted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        <div
+          style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+          onClick={()=>setShowMenu(false)}
+        >
+          <div
+            onClick={e=>e.stopPropagation()}
+            style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'22px 22px 0 0',padding:'20px 20px 36px',width:'100%',boxShadow:t.shadowMd,animation:'popIn 0.18s ease'}}
+          >
+            {/* Handle drag */}
+            <div style={{width:36,height:4,borderRadius:2,background:t.border,margin:'0 auto 18px'}} />
+            <div style={{fontSize:13,fontWeight:800,color:t.text,marginBottom:14}}>Módulos</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+
+              {/* Clientes */}
+              <button onClick={()=>{setShowMenu(false);router.push('/clientes')}}
+                style={{padding:'13px 12px',borderRadius:13,border:`1px solid ${t.border}`,background:t.surfaceAlt,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left' as const}}>
+                <span style={{fontSize:22,flexShrink:0}}>👥</span>
+                <div><div style={{fontSize:12,fontWeight:700,color:t.text}}>Clientes</div><div style={{fontSize:10,color:t.textMuted}}>Base de datos</div></div>
+              </button>
+
+              {/* Pedidos */}
+              <button onClick={()=>{setShowMenu(false);router.push('/pedidos')}}
+                style={{padding:'13px 12px',borderRadius:13,border:`1px solid ${t.border}`,background:t.surfaceAlt,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left' as const}}>
+                <span style={{fontSize:22,flexShrink:0}}>📦</span>
+                <div><div style={{fontSize:12,fontWeight:700,color:t.text}}>Pedidos</div><div style={{fontSize:10,color:t.textMuted}}>Entregas</div></div>
+              </button>
+
+              {/* Costos */}
+              <button onClick={()=>{setShowMenu(false);router.push('/costos')}}
+                style={{padding:'13px 12px',borderRadius:13,border:`1px solid ${t.amberBorder}`,background:t.amber,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left' as const}}>
+                <span style={{fontSize:22,flexShrink:0}}>💸</span>
+                <div><div style={{fontSize:12,fontWeight:700,color:t.amberSub}}>Costos</div><div style={{fontSize:10,color:t.amberSub,opacity:0.75}}>Rentabilidad</div></div>
+              </button>
+
+              {/* Contable */}
+              <button onClick={()=>{setShowMenu(false);router.push('/contable')}}
+                style={{padding:'13px 12px',borderRadius:13,border:'1px solid #bfdbfe',background:'#eff6ff',cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left' as const}}>
+                <span style={{fontSize:22,flexShrink:0}}>📊</span>
+                <div><div style={{fontSize:12,fontWeight:700,color:'#1d4ed8'}}>Contable</div><div style={{fontSize:10,color:'#1d4ed8',opacity:0.75}}>Estados</div></div>
+              </button>
+
+              {/* Personal */}
+              <button onClick={()=>{setShowMenu(false);router.push('/personal')}}
+                style={{padding:'13px 12px',borderRadius:13,border:`1px solid ${t.greenBorder}`,background:t.green,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left' as const}}>
+                <span style={{fontSize:22,flexShrink:0}}>◉</span>
+                <div><div style={{fontSize:12,fontWeight:700,color:t.greenText}}>Personal</div><div style={{fontSize:10,color:t.greenText,opacity:0.75}}>Mis finanzas</div></div>
+              </button>
+
             </div>
+            <button onClick={()=>setShowMenu(false)}
+              style={{marginTop:14,width:'100%',padding:'12px',borderRadius:12,border:`1.5px solid ${t.border}`,background:t.surfaceAlt,color:t.textMuted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+              Cerrar
+            </button>
           </div>
         </div>
       )}
+      {showBuscador && (<ModalBusqueda t={t} dark={dark} onClose={() => setShowBuscador(false)} />)}
     </div>
   )
 }
