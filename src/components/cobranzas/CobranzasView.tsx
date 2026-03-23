@@ -175,17 +175,29 @@ function PanelCuotas({ cobranza, t, dark, onCobrar, onEditarFecha }: {
         const sem = getSemaforoCuota(c)
         const col = colores[sem]
         return (
-          <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, background:col.bg, border:`1px solid ${col.border}` }}>
-            <div style={{ fontSize:10, fontWeight:700, color:col.text, minWidth:20 }}>{c.numero_cuota}</div>
-            <div style={{ flex:1 }}>
-              <input type="date" defaultValue={c.fecha_vencimiento} onBlur={e => { if (e.target.value && e.target.value !== c.fecha_vencimiento) onEditarFecha(c.id, e.target.value) }} style={{ fontSize:11, color:t.text, fontWeight:600, border:'none', background:'transparent', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0, width:110 }} />
+          <div key={c.id} style={{ padding:'8px 10px', borderRadius:10, background:col.bg, border:`1px solid ${col.border}` }}>
+            {/* Línea 1: número + fecha + monto */}
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ fontSize:10, fontWeight:800, color:col.text, flexShrink:0, minWidth:16 }}>{c.numero_cuota}</div>
+              <input
+                type="date"
+                defaultValue={c.fecha_vencimiento}
+                onBlur={e => { if (e.target.value && e.target.value !== c.fecha_vencimiento) onEditarFecha(c.id, e.target.value) }}
+                style={{ fontSize:11, color:t.text, fontWeight:600, border:'none', background:'transparent', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0, flex:1, minWidth:0 }}
+              />
+              <div style={{ fontSize:12, fontWeight:700, color:t.text, fontFamily:'monospace', flexShrink:0 }}>{formatPeso(c.monto)}</div>
             </div>
-            <div style={{ fontSize:12, fontWeight:700, color:t.text, fontFamily:'monospace' }}>{formatPeso(c.monto)}</div>
-            <Badge label={col.label} color={col.text} bg={col.bg} />
-            {sem !== 'pagada' && (
-              <button onClick={() => onCobrar(c, cliente)}
-                style={{ width:28, height:28, borderRadius:8, border:`1px solid ${col.border}`, background:t.surface, color:col.text, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✓</button>
-            )}
+            {/* Línea 2: badge + botón cobrar */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:5 }}>
+              <Badge label={col.label} color={col.text} bg={col.bg} />
+              {sem !== 'pagada' && (
+                <button
+                  onClick={() => onCobrar(c, cliente)}
+                  style={{ padding:'4px 14px', borderRadius:8, border:`1px solid ${col.border}`, background:t.surface, color:col.text, cursor:'pointer', fontSize:12, fontWeight:700 }}>
+                  ✓ Cobrar
+                </button>
+              )}
+            </div>
           </div>
         )
       })}
