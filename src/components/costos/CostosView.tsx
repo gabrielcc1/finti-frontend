@@ -554,10 +554,12 @@ function TabGastos({
 function TabRecetas({
   costos, t,
   onAgregarIngrediente,
+  onEliminarIngrediente,
 }: {
   costos: ReturnType<typeof useCostos>
   t: Tema
   onAgregarIngrediente: () => void
+  onEliminarIngrediente: (productoId: string, materiaPrimaId: string, nombre: string) => void
 }) {
   // Agrupar recetas por producto
   const porProducto = costos.recetas.reduce((acc, r) => {
@@ -613,6 +615,12 @@ function TabRecetas({
                       <span style={{ fontSize:11, color:t.textMuted, fontFamily:'monospace' }}>{toFloat(r.cantidad).toLocaleString('es-AR')} {r.mp?.unidad}</span>
                       <span style={{ fontSize:11, color:t.textFaint }}>{fmt(r.mp?.costo_por_unidad)}/{r.mp?.unidad}</span>
                       <span style={{ fontSize:12, fontWeight:700, fontFamily:'monospace', color:t.text }}>{fmt(toFloat(r.mp?.costo_por_unidad) * toFloat(r.cantidad))}</span>
+                      <button
+                        onClick={() => onEliminarIngrediente(prod.id, r.materia_prima_id, r.mp?.nombre ?? 'ingrediente')}
+                        title="Quitar ingrediente de la receta"
+                        style={{ width:26, height:26, borderRadius:7, border:`1px solid ${t.redBorder}`, background:t.red, color:t.redNum, cursor:'pointer', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        ✕
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -916,60 +924,212 @@ function ModalEditarGasto({ gasto, onConfirm, onCancel, saving, t }: {
 
 function ModalAgregarIngrediente({ costos, onConfirm, onCancel, saving, t }: {
   costos: ReturnType<typeof useCostos>
-  onConfirm: (data: { producto_id: string; materia_prima_id: string; cantidad: number }) => void
+  onConfirm: (items: { producto_id: string; materia_prima_id: string; cantidad: number }[]) => void
   onCancel: () => void
   saving: boolean
   t: Tema
 }) {
   const productos = costos.todosProductos.filter(p => p.tipo_producto !== 'combo')
+
+  // Ingredientes ya existentes en la receta del producto seleccionado
+  // (para no permitir duplicados)
+  const recetasPorProducto = costos.recetas.reduce((acc, r) => {
+    if (!acc[r.producto_id]) acc[r.producto_id] = new Set<string>()
+    acc[r.producto_id].add(r.materia_prima_id)
+    return acc
+  }, {} as Record<string, Set<string>>)
+
   const [prodId, setProdId] = useState(productos[0]?.id ?? '')
-  const [mpId,   setMpId]   = useState(costos.materias[0]?.id ?? '')
-  const [cant,   setCant]   = useState('1')
-  const [error,  setError]  = useState('')
 
-  const mp   = costos.materias.find(m => m.id === mpId)
-  const aporte = (parseFloat(cant)||0) * toFloat(mp?.costo_por_unidad)
+  // Lista de ingredientes a agregar: [{ mpId, cant }]
+  interface LineaIngrediente { mpId: string; cant: string }
+  const [lineas, setLineas] = useState<LineaIngrediente[]>([
+    { mpId: costos.materias[0]?.id ?? '', cant: '1' }
+  ])
+  const [error, setError] = useState('')
 
-  const handleSubmit = () => {
-    if (!prodId || !mpId) { setError('Seleccioná producto y materia prima'); return }
-    if (!cant || parseFloat(cant) <= 0) { setError('Ingresá una cantidad válida'); return }
+  // MP ya en la receta actual + las que el usuario ya eligió en este modal
+  const mpUsadasEnReceta = recetasPorProducto[prodId] ?? new Set<string>()
+  const mpElegidasEnModal = new Set(lineas.map(l => l.mpId))
+
+  // Al cambiar el producto, limpiar las líneas para evitar duplicados cruzados
+  const handleCambiarProducto = (id: string) => {
+    setProdId(id)
+    setLineas([{ mpId: costos.materias[0]?.id ?? '', cant: '1' }])
     setError('')
-    onConfirm({ producto_id: prodId, materia_prima_id: mpId, cantidad: parseFloat(cant) })
+  }
+
+  const agregarLinea = () => {
+    // Buscar la primera MP que no esté ya en la receta ni en las líneas actuales
+    const mpDisponible = costos.materias.find(
+      m => !mpUsadasEnReceta.has(m.id) && !mpElegidasEnModal.has(m.id)
+    )
+    setLineas(prev => [...prev, { mpId: mpDisponible?.id ?? costos.materias[0]?.id ?? '', cant: '1' }])
+  }
+
+  const quitarLinea = (idx: number) => {
+    setLineas(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const cambiarLinea = (idx: number, campo: 'mpId' | 'cant', valor: string) => {
+    setLineas(prev => prev.map((l, i) => i === idx ? { ...l, [campo]: valor } : l))
+  }
+
+  // Costo total de la receta completa (ya existente + nuevas líneas)
+  const costoNuevasLineas = lineas.reduce((s, l) => {
+    const mp = costos.materias.find(m => m.id === l.mpId)
+    return s + (parseFloat(l.cant) || 0) * toFloat(mp?.costo_por_unidad)
+  }, 0)
+
+  const handleGuardar = () => {
+    if (!prodId) { setError('Seleccioná un producto'); return }
+    if (lineas.length === 0) { setError('Agregá al menos un ingrediente'); return }
+
+    // Validar cada línea
+    for (const l of lineas) {
+      if (!l.mpId) { setError('Seleccioná la materia prima en cada línea'); return }
+      if (!l.cant || parseFloat(l.cant) <= 0) { setError('Ingresá cantidades válidas (mayores a 0)'); return }
+    }
+
+    // Verificar que no haya dos líneas con la misma MP
+    const mpIds = lineas.map(l => l.mpId)
+    if (new Set(mpIds).size !== mpIds.length) {
+      setError('Hay ingredientes repetidos. Usá una sola línea por ingrediente.')
+      return
+    }
+
+    // Verificar que ninguna MP ya exista en la receta del producto
+    const duplicadaEnReceta = lineas.find(l => mpUsadasEnReceta.has(l.mpId))
+    if (duplicadaEnReceta) {
+      const mpNombre = costos.materias.find(m => m.id === duplicadaEnReceta.mpId)?.nombre ?? 'ingrediente'
+      setError(`"${mpNombre}" ya existe en la receta de este producto.`)
+      return
+    }
+
+    setError('')
+    onConfirm(lineas.map(l => ({
+      producto_id:      prodId,
+      materia_prima_id: l.mpId,
+      cantidad:         parseFloat(l.cant),
+    })))
   }
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:300, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:20, padding:'24px 22px', maxWidth:400, width:'100%', boxShadow:t.shadowMd, animation:'popIn 0.18s ease' }}>
-        <div style={{ fontSize:16, fontWeight:800, color:t.text, marginBottom:18 }}>🧪 Agregar ingrediente</div>
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <div style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:20, padding:'24px 22px', maxWidth:480, width:'100%', boxShadow:t.shadowMd, animation:'popIn 0.18s ease', maxHeight:'90vh', overflowY:'auto' }}>
+
+        {/* Header */}
+        <div style={{ fontSize:16, fontWeight:800, color:t.text, marginBottom:4 }}>🧪 Crear / editar receta</div>
+        <div style={{ fontSize:11, color:t.textFaint, marginBottom:18 }}>Podés agregar todos los ingredientes de una vez</div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+          {/* Selector de producto */}
           <div>
             <label style={labelStyle(t)}>Producto terminado</label>
-            <select value={prodId} onChange={e=>setProdId(e.target.value)} style={{ ...inputStyle(t), cursor:'pointer' }}>
+            <select value={prodId} onChange={e => handleCambiarProducto(e.target.value)}
+              style={{ ...inputStyle(t), cursor:'pointer' }}>
               {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
           </div>
+
+          {/* Lista de ingredientes */}
           <div>
-            <label style={labelStyle(t)}>Materia prima</label>
-            <select value={mpId} onChange={e=>setMpId(e.target.value)} style={{ ...inputStyle(t), cursor:'pointer' }}>
-              {costos.materias.map(m => <option key={m.id} value={m.id}>{m.nombre} — {fmt(m.costo_por_unidad)}/{m.unidad}</option>)}
-            </select>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+              <label style={labelStyle(t)}>Ingredientes</label>
+              <button onClick={agregarLinea}
+                style={{ fontSize:11, fontWeight:700, color:t.accent, background:'transparent', border:'none', cursor:'pointer', padding:'2px 0' }}>
+                + Agregar ingrediente
+              </button>
+            </div>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {lineas.map((linea, idx) => {
+                const mpActual = costos.materias.find(m => m.id === linea.mpId)
+                const aporte = (parseFloat(linea.cant) || 0) * toFloat(mpActual?.costo_por_unidad)
+
+                // MP disponibles para esta línea: no en receta existente y no en otras líneas (excepto la actual)
+                const mpDisponibles = costos.materias.filter(m =>
+                  !mpUsadasEnReceta.has(m.id) &&
+                  (!mpElegidasEnModal.has(m.id) || m.id === linea.mpId)
+                )
+
+                return (
+                  <div key={idx} style={{ padding:'10px 12px', borderRadius:12, background:t.surfaceAlt, border:`1px solid ${t.border}` }}>
+                    {/* Fila superior: MP + botón quitar */}
+                    <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+                      <select
+                        value={linea.mpId}
+                        onChange={e => cambiarLinea(idx, 'mpId', e.target.value)}
+                        style={{ ...inputStyle(t), flex:1, cursor:'pointer' }}
+                      >
+                        {mpDisponibles.length === 0
+                          ? <option value="">No hay más ingredientes disponibles</option>
+                          : mpDisponibles.map(m =>
+                              <option key={m.id} value={m.id}>{m.nombre} — {fmt(m.costo_por_unidad)}/{m.unidad}</option>
+                            )
+                        }
+                      </select>
+                      {lineas.length > 1 && (
+                        <button onClick={() => quitarLinea(idx)}
+                          style={{ width:32, height:36, borderRadius:9, border:`1px solid ${t.redBorder}`, background:t.red, color:t.redNum, cursor:'pointer', fontSize:14, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Fila inferior: cantidad + aporte al costo */}
+                    <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                      <div style={{ flex:1 }}>
+                        <label style={{ ...labelStyle(t), marginBottom:3 }}>
+                          Cantidad {mpActual ? `(${mpActual.unidad})` : ''} por unidad producida
+                        </label>
+                        <input
+                          type="number" min="0.001" step="0.001"
+                          value={linea.cant}
+                          onChange={e => cambiarLinea(idx, 'cant', e.target.value)}
+                          style={inputStyle(t)}
+                        />
+                      </div>
+                      {aporte > 0 && (
+                        <div style={{ flexShrink:0, textAlign:'right' as const, paddingTop:16 }}>
+                          <div style={{ fontSize:9, color:t.textFaint }}>Aporte al costo</div>
+                          <div style={{ fontSize:13, fontWeight:800, fontFamily:'monospace', color:t.text }}>{fmt(aporte)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <div>
-            <label style={labelStyle(t)}>Cantidad {mp ? `(${mp.unidad})` : ''} por unidad producida</label>
-            <input type="number" min="0.001" step="0.001" value={cant} onChange={e=>setCant(e.target.value)} style={inputStyle(t)} autoFocus />
-          </div>
-          {aporte > 0 && (
-            <div style={{ padding:'8px 12px', borderRadius:10, background:t.surfaceAlt, border:`1px solid ${t.border}` }}>
-              <span style={{ fontSize:11, color:t.textMuted }}>Aporte al costo: </span>
-              <span style={{ fontSize:13, fontWeight:800, fontFamily:'monospace', color:t.text }}>{fmt(aporte)}</span>
+
+          {/* Costo total de las nuevas líneas */}
+          {costoNuevasLineas > 0 && (
+            <div style={{ padding:'10px 14px', borderRadius:10, background:t.surfaceAlt, border:`1px solid ${t.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontSize:12, color:t.textMuted }}>Costo total de ingredientes a agregar</span>
+              <span style={{ fontSize:15, fontWeight:800, fontFamily:'monospace', color:t.text }}>{fmt(costoNuevasLineas)}</span>
             </div>
           )}
-          {error && <div style={{ fontSize:11, color:t.redNum }}>{error}</div>}
-          <div style={{ display:'flex', gap:10 }}>
-            <button onClick={onCancel} style={{ flex:1, padding:12, borderRadius:12, border:`1.5px solid ${t.border}`, background:t.surfaceAlt, color:t.textMuted, fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancelar</button>
-            <button onClick={handleSubmit} disabled={saving}
-              style={{ flex:1, padding:12, borderRadius:12, border:'none', background:t.accent, color:t.accentText, fontSize:13, fontWeight:800, cursor: saving?'wait':'pointer', opacity: saving?0.7:1 }}>
-              {saving ? 'Guardando...' : '✓ Agregar'}
+
+          {error && (
+            <div style={{ fontSize:11, color:t.redNum, padding:'8px 12px', borderRadius:9, background:t.red, border:`1px solid ${t.redBorder}` }}>
+              ⚠ {error}
+            </div>
+          )}
+
+          {/* Botones */}
+          <div style={{ display:'flex', gap:10, marginTop:4 }}>
+            <button onClick={onCancel}
+              style={{ flex:1, padding:12, borderRadius:12, border:`1.5px solid ${t.border}`, background:t.surfaceAlt, color:t.textMuted, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+              Cancelar
+            </button>
+            <button onClick={handleGuardar} disabled={saving || lineas.length === 0}
+              style={{ flex:2, padding:12, borderRadius:12, border:'none', background:t.accent, color:t.accentText, fontSize:13, fontWeight:800, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              {saving
+                ? 'Guardando...'
+                : `✓ Guardar ${lineas.length} ingrediente${lineas.length !== 1 ? 's' : ''}`
+              }
             </button>
           </div>
         </div>
@@ -991,6 +1151,11 @@ export function CostosView({ usuario, costos }: CostosViewProps) {
   const [modalEditarGasto,  setModalEditarGasto]  = useState<GastoItem | null>(null)
   const [confirmarEliminar, setConfirmarEliminar] = useState<{id:string;desc:string}|null>(null)
   const [modalReceta,       setModalReceta]       = useState(false)
+  const [confirmarEliminarIngrediente, setConfirmarEliminarIngrediente] = useState<{
+    productoId: string
+    materiaPrimaId: string
+    nombre: string
+  } | null>(null)
 
   const router = useRouter()
 
@@ -1032,9 +1197,25 @@ export function CostosView({ usuario, costos }: CostosViewProps) {
     catch (err) { console.error(err) }
   }
 
-  const handleAgregarReceta = async (data: Parameters<typeof costos.agregarReceta>[0]) => {
-    try { await costos.agregarReceta(data); setModalReceta(false) }
-    catch (err) { console.error(err) }
+  const handleAgregarReceta = async (items: { producto_id: string; materia_prima_id: string; cantidad: number }[]) => {
+    try {
+      // Guardar todos los ingredientes en secuencia
+      for (const item of items) {
+        await costos.agregarReceta(item)
+      }
+      setModalReceta(false)
+    } catch (err) { console.error(err) }
+  }
+
+  const handleEliminarIngrediente = async () => {
+    if (!confirmarEliminarIngrediente) return
+    try {
+      await costos.eliminarReceta(
+        confirmarEliminarIngrediente.productoId,
+        confirmarEliminarIngrediente.materiaPrimaId
+      )
+      setConfirmarEliminarIngrediente(null)
+    } catch (err) { console.error(err) }
   }
 
   const kpis = [
@@ -1099,7 +1280,7 @@ export function CostosView({ usuario, costos }: CostosViewProps) {
         {tab === 'simulador'    && <TabSimulador    costos={costos} t={t} onGuardar={handleGuardarPrecio} />}
         {tab === 'combos'       && <TabCombos       costos={costos} t={t} onCrear={()=>setModalCombo(true)} />}
         {tab === 'gastos'       && <TabGastos       costos={costos} t={t} onAgregarGasto={()=>setModalGasto(true)} onEditarGasto={g=>setModalEditarGasto(g)} onEliminarGasto={(id,desc)=>setConfirmarEliminar({id,desc})} />}
-        {tab === 'recetas'      && <TabRecetas      costos={costos} t={t} onAgregarIngrediente={()=>setModalReceta(true)} />}
+        {tab === 'recetas'      && <TabRecetas      costos={costos} t={t} onAgregarIngrediente={()=>setModalReceta(true)} onEliminarIngrediente={(pId, mpId, nombre) => setConfirmarEliminarIngrediente({ productoId: pId, materiaPrimaId: mpId, nombre })} />}
       </div>
 
       {/* Bottom nav mobile */}
@@ -1156,6 +1337,32 @@ export function CostosView({ usuario, costos }: CostosViewProps) {
               <button onClick={()=>handleEliminarGasto(confirmarEliminar.id)} disabled={costos.saving}
                 style={{ flex:1, padding:12, borderRadius:12, border:'none', background:t.redNum, color:'#fff', fontSize:13, fontWeight:800, cursor: costos.saving?'wait':'pointer', opacity: costos.saving?0.7:1 }}>
                 {costos.saving ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación eliminar ingrediente de receta */}
+      {confirmarEliminarIngrediente && (
+        <div style={{ position:'fixed', inset:0, zIndex:400, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:20, padding:'28px 24px', maxWidth:340, width:'100%', boxShadow:t.shadowMd, animation:'popIn 0.18s ease', textAlign:'center' }}>
+            <div style={{ fontSize:36, marginBottom:12 }}>🧪</div>
+            <div style={{ fontSize:15, fontWeight:800, color:t.text, marginBottom:8 }}>¿Quitar ingrediente?</div>
+            <div style={{ fontSize:13, color:t.textMuted, marginBottom:6 }}>
+              <strong>{confirmarEliminarIngrediente.nombre}</strong>
+            </div>
+            <div style={{ fontSize:11, color:t.textMuted, marginBottom:20 }}>
+              Se quitará de la receta y el costo del producto se recalculará automáticamente.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setConfirmarEliminarIngrediente(null)}
+                style={{ flex:1, padding:12, borderRadius:12, border:`1.5px solid ${t.border}`, background:t.surfaceAlt, color:t.textMuted, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={handleEliminarIngrediente} disabled={costos.saving}
+                style={{ flex:1, padding:12, borderRadius:12, border:'none', background:t.redNum, color:'#fff', fontSize:13, fontWeight:800, cursor: costos.saving?'wait':'pointer', opacity: costos.saving?0.7:1 }}>
+                {costos.saving ? 'Quitando...' : 'Sí, quitar'}
               </button>
             </div>
           </div>
