@@ -392,8 +392,11 @@ export function useStock() {
   const eliminarMateriaPrima = useCallback(async (id: string): Promise<void> => {
     setSaving(true)
     try {
-      // Primero eliminar las recetas que la usen (FK constraint)
+      // 1. Eliminar recetas que la usen (FK: recetas.materia_prima_id)
       await db(supabase).from('recetas').delete().eq('materia_prima_id', id)
+      // 2. Eliminar historial de compras de esta MP (FK: compras_materia_prima.materia_prima_id)
+      await db(supabase).from('compras_materia_prima').delete().eq('materia_prima_id', id)
+      // 3. Ahora si se puede borrar la MP
       const { error: err } = await db(supabase)
         .from('materias_primas').delete().eq('id', id)
       if (err) throw new Error(`eliminar MP: ${err.message}`)
