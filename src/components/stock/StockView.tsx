@@ -666,12 +666,14 @@ function TabProductos({
 // ── Tab Insumos ────────────────────────────────────────────────────────────
 function TabInsumos({
   stock, t, dark,
-  onComprar, onNueva,
+  onComprar, onNueva, onEditar, onEliminar,
 }: {
   stock: ReturnType<typeof useStock>
   t: Tema; dark: boolean
   onComprar: () => void
   onNueva: () => void
+  onEditar: (mp: MateriaPrima) => void
+  onEliminar: (mp: MateriaPrima) => void
 }) {
   const costoReponer = stock.materias
     .filter(m => toFloat(m.stock_actual) <= toFloat(m.stock_minimo))
@@ -750,6 +752,16 @@ function TabInsumos({
                     </div>
                     <div style={{ fontSize: 10, color: t.textMuted }}>{m.unidad}</div>
                     <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{formatPeso(m.costo_por_unidad)}/{m.unidad}</div>
+                  </div>
+
+                  {/* Botones editar / eliminar */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+                    <button onClick={() => onEditar(m)}
+                      style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Editar insumo">✎</button>
+                    <button onClick={() => onEliminar(m)}
+                      style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${t.redBorder}`, background: t.red, color: t.redNum, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Eliminar insumo">✕</button>
                   </div>
                 </div>
               )
@@ -832,9 +844,133 @@ function TabHistorial({ movimientos, t }: { movimientos: MovimientoStock[]; t: T
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// STOCK VIEW PRINCIPAL
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Modal: Editar materia prima ────────────────────────────────────────────
+function ModalEditarMP({
+  mp, onConfirm, onCancel, saving, t
+}: {
+  mp: MateriaPrima
+  onConfirm: (data: NuevaMateriaPrimaData) => void
+  onCancel: () => void
+  saving: boolean
+  t: Tema
+}) {
+  const [nombre,  setNombre]  = useState(mp.nombre)
+  const [unidad,  setUnidad]  = useState(mp.unidad)
+  const [costo,   setCosto]   = useState(toFloat(mp.costo_por_unidad).toString())
+  const [stockAct,setStockAct]= useState(toFloat(mp.stock_actual).toString())
+  const [stockMin,setStockMin]= useState(toFloat(mp.stock_minimo).toString())
+  const [error,   setError]   = useState('')
+
+  const handleSubmit = () => {
+    if (!nombre.trim()) { setError('El nombre es obligatorio'); return }
+    if (!costo || toFloat(costo) <= 0) { setError('Ingresá el costo por unidad'); return }
+    setError('')
+    onConfirm({
+      nombre: nombre.trim(),
+      unidad,
+      costo_por_unidad: toFloat(costo),
+      stock_actual: parseFloat(stockAct) || 0,
+      stock_minimo: parseFloat(stockMin) || 0,
+    })
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 10,
+    border: `1.5px solid ${t.border}`, background: t.surfaceAlt,
+    color: t.text, fontSize: 13, outline: 'none',
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+  }
+  const labelStyle = { fontSize: 11, fontWeight: 600, color: t.textMuted, marginBottom: 4, display: 'block' as const }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 20, padding: '24px 22px', maxWidth: 400, width: '100%', boxShadow: t.shadowMd, animation: 'popIn 0.18s ease' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>Editar materia prima</div>
+        <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 18 }}>{mp.nombre}</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <div>
+            <label style={labelStyle}>Nombre *</label>
+            <input type="text" value={nombre} onChange={e => setNombre(e.target.value)}
+              style={inputStyle} autoFocus />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Unidad de medida</label>
+              <select value={unidad} onChange={e => setUnidad(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                {['kg', 'g', 'litro', 'ml', 'metro', 'cm', 'unidad', 'docena', 'caja'].map(u =>
+                  <option key={u} value={u}>{u}</option>
+                )}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Costo por {unidad || 'unidad'} $</label>
+              <input type="number" min="0" value={costo} onChange={e => setCosto(e.target.value)}
+                placeholder="0" style={inputStyle} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Stock actual ({unidad})</label>
+              <input type="number" min="0" step="0.001" value={stockAct}
+                onChange={e => setStockAct(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Stock mínimo ({unidad})</label>
+              <input type="number" min="0" step="0.001" value={stockMin}
+                onChange={e => setStockMin(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          {error && <div style={{ fontSize: 11, color: t.redNum }}>{error}</div>}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button onClick={onCancel} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={handleSubmit} disabled={saving}
+              style={{ flex: 1, padding: 12, borderRadius: 12, border: 'none', background: t.accent, color: t.accentText, fontSize: 13, fontWeight: 800, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              {saving ? 'Guardando...' : '✓ Guardar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: Confirmar eliminación MP ───────────────────────────────────────────
+function ModalConfirmarEliminarMP({
+  mp, onConfirm, onCancel, saving, t
+}: {
+  mp: MateriaPrima
+  onConfirm: () => void
+  onCancel: () => void
+  saving: boolean
+  t: Tema
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 20, padding: '28px 24px', maxWidth: 340, width: '100%', boxShadow: t.shadowMd, animation: 'popIn 0.18s ease', textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🗑</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 8 }}>¿Eliminar insumo?</div>
+        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 6 }}>
+          <strong>{mp.nombre}</strong>
+        </div>
+        <div style={{ fontSize: 11, color: t.redNum, marginBottom: 20, padding: '8px 12px', borderRadius: 9, background: t.red, border: `1px solid ${t.redBorder}` }}>
+          ⚠ También se eliminarán las recetas que usen este insumo
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={onConfirm} disabled={saving}
+            style={{ flex: 1, padding: 12, borderRadius: 12, border: 'none', background: t.redNum, color: '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Eliminando...' : 'Sí, eliminar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 export function StockView({ usuario, stock }: StockViewProps) {
   const [dark, setDark] = useDarkMode()
   const [isMobile,    setIsMobile]    = useState(false)
@@ -843,6 +979,8 @@ export function StockView({ usuario, stock }: StockViewProps) {
   const [modalProd,   setModalProd]   = useState<false | 'nuevo' | Producto>(false)
   const [modalCompra, setModalCompra] = useState(false)
   const [modalNuevaMP,setModalNuevaMP]= useState(false)
+  const [modalEditarMP, setModalEditarMP] = useState<MateriaPrima | null>(null)
+  const [modalEliminarMP, setModalEliminarMP] = useState<MateriaPrima | null>(null)
 
   const router = useRouter()
 
@@ -888,6 +1026,22 @@ export function StockView({ usuario, stock }: StockViewProps) {
     try {
       await stock.crearMateriaPrima(data)
       setModalNuevaMP(false)
+    } catch (err) { console.error(err) }
+  }
+
+  const handleEditarMP = async (data: NuevaMateriaPrimaData) => {
+    if (!modalEditarMP) return
+    try {
+      await stock.editarMateriaPrima(modalEditarMP.id, data)
+      setModalEditarMP(null)
+    } catch (err) { console.error(err) }
+  }
+
+  const handleEliminarMP = async () => {
+    if (!modalEliminarMP) return
+    try {
+      await stock.eliminarMateriaPrima(modalEliminarMP.id)
+      setModalEliminarMP(null)
     } catch (err) { console.error(err) }
   }
 
@@ -974,6 +1128,8 @@ export function StockView({ usuario, stock }: StockViewProps) {
             stock={stock} t={t} dark={dark}
             onComprar={() => setModalCompra(true)}
             onNueva={() => setModalNuevaMP(true)}
+            onEditar={mp => setModalEditarMP(mp)}
+            onEliminar={mp => setModalEliminarMP(mp)}
           />
         )}
         {tab === 'historial' && (
@@ -1045,6 +1201,24 @@ export function StockView({ usuario, stock }: StockViewProps) {
         <ModalNuevaMP
           onConfirm={handleNuevaMP}
           onCancel={() => setModalNuevaMP(false)}
+          saving={stock.saving}
+          t={t}
+        />
+      )}
+      {modalEditarMP && (
+        <ModalEditarMP
+          mp={modalEditarMP}
+          onConfirm={handleEditarMP}
+          onCancel={() => setModalEditarMP(null)}
+          saving={stock.saving}
+          t={t}
+        />
+      )}
+      {modalEliminarMP && (
+        <ModalConfirmarEliminarMP
+          mp={modalEliminarMP}
+          onConfirm={handleEliminarMP}
+          onCancel={() => setModalEliminarMP(null)}
           saving={stock.saving}
           t={t}
         />

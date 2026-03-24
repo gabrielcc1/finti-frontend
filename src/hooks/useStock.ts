@@ -95,7 +95,10 @@ interface MateriaPrimaInsertLocal {
   stock_minimo?: string
 }
 interface MateriaPrimaUpdateLocal {
+  nombre?: string
+  unidad?: string
   stock_actual?: string
+  stock_minimo?: string
   costo_por_unidad?: string
 }
 interface CompraMpInsertLocal {
@@ -347,6 +350,59 @@ export function useStock() {
     }
   }, [supabase])
 
+  // ── Editar materia prima ───────────────────────────────────────────────────
+  const editarMateriaPrima = useCallback(async (
+    id: string,
+    data: NuevaMateriaPrimaData
+  ): Promise<void> => {
+    setSaving(true)
+    try {
+      const update: MateriaPrimaUpdateLocal = {
+        nombre:           data.nombre,
+        unidad:           data.unidad,
+        costo_por_unidad: data.costo_por_unidad.toString(),
+        stock_actual:     data.stock_actual.toString(),
+        stock_minimo:     data.stock_minimo.toString(),
+      }
+      const { error: err } = await db(supabase)
+        .from('materias_primas').update(update).eq('id', id)
+      if (err) throw new Error(`editar MP: ${err.message}`)
+
+      // Si cambió el costo, recalcular productos que usan esta MP
+      const mpAnterior = materias.find(m => m.id === id)
+      if (mpAnterior && toFloat(mpAnterior.costo_por_unidad) !== data.costo_por_unidad) {
+        const { data: recetas } = await db(supabase)
+          .from('recetas').select('producto_id').eq('materia_prima_id', id)
+        for (const r of (recetas as { producto_id: string }[]) ?? []) {
+          await db(supabase).rpc('recalcular_costo_producto', { p_producto_id: r.producto_id })
+        }
+        await fetchProductos()
+      }
+
+      setMaterias(prev =>
+        prev.map(m => m.id === id
+          ? { ...m, ...update, costo_por_unidad: data.costo_por_unidad.toString() }
+          : m
+        ).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      )
+    } finally { setSaving(false) }
+  }, [supabase, materias, fetchProductos])
+
+  // ── Eliminar materia prima ─────────────────────────────────────────────────
+  const eliminarMateriaPrima = useCallback(async (id: string): Promise<void> => {
+    setSaving(true)
+    try {
+      // Primero eliminar las recetas que la usen (FK constraint)
+      await db(supabase).from('recetas').delete().eq('materia_prima_id', id)
+      const { error: err } = await db(supabase)
+        .from('materias_primas').delete().eq('id', id)
+      if (err) throw new Error(`eliminar MP: ${err.message}`)
+      setMaterias(prev => prev.filter(m => m.id !== id))
+      // Refrescar productos por si sus costos quedaron desactualizados
+      await fetchProductos()
+    } finally { setSaving(false) }
+  }, [supabase, fetchProductos])
+
   // ── Registrar compra de materia prima ──────────────────────────────────────
   const registrarCompraMP = useCallback(async (data: CompraMateriaPrimaData): Promise<void> => {
     setSaving(true)
@@ -424,6 +480,8 @@ export function useStock() {
     crearProducto,
     editarProducto,
     crearMateriaPrima,
+    editarMateriaPrima,
+    eliminarMateriaPrima,
     registrarCompraMP,
     refetch: () => Promise.all([fetchProductos(), fetchMaterias(), fetchMovimientos()]),
   }

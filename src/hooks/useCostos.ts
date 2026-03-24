@@ -325,6 +325,24 @@ export function useCostos() {
     } finally { setSaving(false) }
   }, [supabase, fetchRecetas, fetchProductos])
 
+  const eliminarReceta = useCallback(async (
+    productoId: string,
+    materiaPrimaId: string
+  ): Promise<void> => {
+    setSaving(true)
+    try {
+      const { error: err } = await db(supabase)
+        .from('recetas')
+        .delete()
+        .eq('producto_id', productoId)
+        .eq('materia_prima_id', materiaPrimaId)
+      if (err) throw new Error(`eliminar receta: ${err.message}`)
+      // Recalcular costo del producto sin este ingrediente
+      await db(supabase).rpc('recalcular_costo_producto', { p_producto_id: productoId })
+      await Promise.all([fetchRecetas(), fetchProductos()])
+    } finally { setSaving(false) }
+  }, [supabase, fetchRecetas, fetchProductos])
+
   const resumen = {
     margenPromedio: productos.length > 0
       ? Math.round(
@@ -350,7 +368,7 @@ export function useCostos() {
     gastosMes, gastosLista,
     resumen, loading, saving, error,
     actualizarCostos, actualizarPrecio, crearCombo,
-    agregarGasto, editarGasto, eliminarGasto, agregarReceta,
+    agregarGasto, editarGasto, eliminarGasto, agregarReceta, eliminarReceta,
     refetch: () => Promise.all([fetchProductos(), fetchTodosProductos(), fetchMaterias(), fetchCombos(), fetchRecetas(), fetchGastosMes(), fetchGastosLista()]),
   }
 }
