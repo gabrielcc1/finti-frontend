@@ -12,24 +12,33 @@ const db = (supabase: ReturnType<typeof createClient>) => supabase as any
 type Negocio = Database['public']['Tables']['negocios']['Row']
 type Perfil  = Database['public']['Tables']['usuarios']['Row']
 
+interface NegocioInsertLocal { nombre: string; tier: 'free' | 'pro' | 'business' }
+interface UsuarioInsertLocal { id: string; negocio_id: string; rol: 'owner' | 'empleado' | 'contador' }
+
 interface UsuarioConNegocio {
   user:    User | null
   perfil:  Perfil | null
   negocio: Negocio | null
   loading: boolean
   error:   string | null
+  // Estado post-registro: null = sin intentar, true = esperando confirmación
+  pendienteConfirmacion: boolean
+  emailPendiente: string | null
 }
 
 export function useAuth(): UsuarioConNegocio & {
-  signInWithEmail:  (email: string, password: string) => Promise<void>
-  signUpWithEmail:  (email: string, password: string, nombreNegocio: string) => Promise<void>
-  signOut:          () => Promise<void>
+  signInWithEmail:       (email: string, password: string) => Promise<void>
+  signUpWithEmail:       (email: string, password: string, nombreNegocio: string) => Promise<void>
+  reenviarConfirmacion:  (email: string) => Promise<void>
+  signOut:               () => Promise<void>
 } {
   const [user,    setUser]    = useState<User | null>(null)
   const [perfil,  setPerfil]  = useState<Perfil | null>(null)
   const [negocio, setNegocio] = useState<Negocio | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
+  const [pendienteConfirmacion, setPendienteConfirmacion] = useState(false)
+  const [emailPendiente,        setEmailPendiente]        = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -98,51 +107,78 @@ export function useAuth(): UsuarioConNegocio & {
   ): Promise<void> => {
     setError(null)
 
-    // ── PASO 1: Crear usuario en Supabase Auth ──────────────────────────────
+    // 1. Intentar crear el usuario en Auth
     const { data: authData, error: errAuth } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        // emailRedirectTo: se configura en Supabase dashboard → Auth → URL Configuration
+        // Acá se puede pasar data adicional que queda en user_metadata
+        data: { nombre_negocio: nombreNegocio },
+      },
     })
 
-    if (errAuth || !authData.user) {
-      const msg = errAuth?.message ?? 'Error al registrar el usuario'
-      setError(msg)
-      throw new Error(msg)
+    if (errAuth) {
+      setError(errAuth.message)
+      throw errAuth
     }
 
+    if (!authData.user) {
+      const err = new Error('No se pudo crear el usuario')
+      setError(err.message)
+      throw err
+    }
+
+    // 2. Verificar si Supabase requiere confirmación de email
+    //    Cuando email confirmation está ON: session === null después del signUp
+    //    Cuando está OFF: session viene con datos y el usuario ya está logueado
+    const requiereConfirmacion = !authData.session
+
+    if (requiereConfirmacion) {
+      // Mostrar pantalla de "revisá tu email" — NO crear negocio todavía.
+      // El negocio se crea en el trigger de Supabase o en el primer login confirmado.
+      // Por ahora guardamos el nombre en user_metadata (ya pasado arriba) para
+      // recuperarlo después de la confirmación via onAuthStateChange.
+      setPendienteConfirmacion(true)
+      setEmailPendiente(email)
+      return
+    }
+
+    // 3. Si NO requiere confirmación (toggle OFF): flujo original
     const userId = authData.user.id
 
-    // ── PASO 2: Crear negocio + usuario via función RPC ─────────────────────
-    //
-    // No hacemos INSERT directo porque en el momento del signUp la sesión
-    // autenticada puede no estar disponible → RLS bloquea con error 42501.
-    //
-    // La función `crear_negocio_y_usuario` (definida en fix_rls_definitivo.sql)
-    // usa SECURITY DEFINER para ejecutarse con permisos elevados.
+    const negocioInsert: NegocioInsertLocal = { nombre: nombreNegocio, tier: 'free' }
+    const { data: negocioData, error: errNegocio } = await db(supabase)
+      .from('negocios')
+      .insert(negocioInsert)
+      .select()
+      .single()
 
-    const { data: rpcData, error: errRpc } = await db(supabase)
-      .rpc('crear_negocio_y_usuario', {
-        p_nombre_negocio: nombreNegocio.trim(),
-        p_user_id:        userId,
-      })
-
-    if (errRpc) {
-      console.error('Error RPC:', JSON.stringify(errRpc))
-      const msg = errRpc?.message ?? `Error al configurar el negocio (${errRpc?.code ?? 'desconocido'})`
-      setError(msg)
-      throw new Error(msg)
+    if (errNegocio || !negocioData) {
+      setError(errNegocio?.message ?? 'Error al crear negocio')
+      throw errNegocio
     }
 
-    const resultado = rpcData as { ok: boolean; error?: string; negocio_id?: string }
-
-    if (!resultado?.ok) {
-      const msg = resultado?.error ?? 'Error al crear el negocio'
-      console.error('Error en función RPC:', msg)
-      setError(msg)
-      throw new Error(msg)
+    const usuarioInsert: UsuarioInsertLocal = {
+      id:         userId,
+      negocio_id: (negocioData as Negocio).id,
+      rol:        'owner',
     }
+    await db(supabase).from('usuarios').insert(usuarioInsert)
 
-    // El onAuthStateChange se encarga de cargar el perfil automáticamente
+  }, [supabase])
+
+  // Reenviar email de confirmación
+  const reenviarConfirmacion = useCallback(async (email: string): Promise<void> => {
+    setError(null)
+    const { error: err } = await supabase.auth.resend({
+      type:  'signup',
+      email,
+    })
+    if (err) {
+      setError(err.message)
+      throw err
+    }
   }, [supabase])
 
   const signOut = useCallback(async (): Promise<void> => {
@@ -152,5 +188,9 @@ export function useAuth(): UsuarioConNegocio & {
     setNegocio(null)
   }, [supabase])
 
-  return { user, perfil, negocio, loading, error, signInWithEmail, signUpWithEmail, signOut }
+  return {
+    user, perfil, negocio, loading, error,
+    pendienteConfirmacion, emailPendiente,
+    signInWithEmail, signUpWithEmail, reenviarConfirmacion, signOut,
+  }
 }
