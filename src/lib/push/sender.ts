@@ -16,7 +16,7 @@ function setup() {
 
 export type PushTipo =
   | 'cuota_vence_hoy' | 'cuota_vencida' | 'pedido_entrega_hoy'
-  | 'pago_confirmado' | 'stock_critico' | 'general'
+  | 'pago_confirmado' | 'stock_critico' | 'general' | 'pedido_manana'
 
 export interface PushPayload {
   title: string
@@ -90,6 +90,14 @@ export const pushTemplates = {
     body:  `Tenés ${cant} pedido${cant > 1 ? 's' : ''} para entregar hoy. Revisá los detalles.`,
     type:  'pedido_entrega_hoy',
     url:   '/pedidos',
+  }),
+ pedidosManana: (cant: number): PushPayload => ({
+    type: 'pedido_manana',
+    title: `⏰ ${cant} entrega${cant > 1 ? 's' : ''} para mañana`,
+    body:  cant === 1
+      ? 'Tenés 1 pedido para entregar mañana. ¡Preparalo hoy!'
+      : `Tenés ${cant} pedidos para entregar mañana. Verificá que estén listos.`,
+    url: '/pedidos',
   }),
   pagoConfirmado: (cliente: string, monto: number): PushPayload => ({
     title: `✅ Pago de ${cliente}`,
