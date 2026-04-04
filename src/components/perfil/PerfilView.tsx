@@ -1,11 +1,13 @@
 'use client'
 
 // src/components/perfil/PerfilView.tsx
+import { NotificacionesSection } from './NotificacionesSection'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/shared/Sidebar'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import type { usePerfil } from '@/hooks/usePerfil'
+
 
 interface PerfilViewProps {
   usuario: { nombre: string; negocio: string; tier: string; avatar: string }
@@ -336,16 +338,41 @@ export function PerfilView({ usuario, perfil: hook }: PerfilViewProps) {
   )
 
   return (
-    <div suppressHydrationWarning style={{ height:'100vh', display:'flex', background:t.bg, fontFamily:"'DM Sans',system-ui,sans-serif", overflow:'hidden' }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-      <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:#33302a;border-radius:4px;}`}</style>
+  <div suppressHydrationWarning style={{ height:'100vh', display:'flex', background:t.bg, fontFamily:"'DM Sans',system-ui,sans-serif", overflow:'hidden' }}>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:#33302a;border-radius:4px;}`}</style>
 
-      {/* Sidebar solo en desktop */}
-      {!isMobile && (
-        <Sidebar activo="dashboard" usuario={usuario} dark={dark} setDark={setDark} t={t} />
-      )}
+    {!isMobile && (
+      <Sidebar activo="dashboard" usuario={usuario} dark={dark} setDark={setDark} t={t} />
+    )}
 
-      {contenido}
-    </div>
-  )
+    {/* Contenedor principal con scroll */}
+    <main style={{ 
+      flex: 1, 
+      overflowY: 'auto', 
+      padding: isMobile ? '1rem' : '2rem', // Ajusta el padding según dispositivo
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2rem' // Espacio entre el contenido y la sección de notificaciones
+    }}>
+      
+      {/* Contenido principal (Dash, Stock, etc.) */}
+      <div style={{ width: '100%' }}>
+        {contenido}
+      </div>
+      
+      {/* Sección de Notificaciones con el mismo ancho que el contenido */}
+      <div style={{ 
+        maxWidth: '800px', // O el ancho máximo que uses en tus otras secciones
+        width: '100%',
+        marginBottom: isMobile ? '5rem' : '0' // Espacio extra en móvil por si tenés menú inferior
+      }}>
+        <Seccion titulo="🔔 Notificaciones" t={t}>
+          <NotificacionesSection t={t} />
+        </Seccion>
+      </div>
+
+    </main>
+  </div>
+)
 }

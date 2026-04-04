@@ -217,17 +217,36 @@ export function usePersonal() {
   }, [supabase])
 
   // ── Fetch salud financiera ──────────────────────────────────────────────────
-  const fetchSalud = useCallback(async (): Promise<void> => {
+   const fetchSalud = useCallback(async (): Promise<void> => {
+    // FIX: usar .maybeSingle() en lugar de .single()
+    // La vista v_salud_financiera_personal puede no tener fila para usuarios
+    // nuevos que aún no registraron ingresos. .single() tira 406 en ese caso.
     const { data, error: err } = await db(supabase)
-      .from('v_salud_financiera_personal').select('*').single()
-    if (err && err.code !== 'PGRST116') throw new Error(`salud: ${err.message}`)
+      .from('v_salud_financiera_personal')
+      .select('usuario_id, ingresos_del_negocio, ingresos_totales, pct_dependencia_negocio')
+      .maybeSingle()
+ 
+    // Silenciar error — es esperable para usuarios nuevos sin datos
+    if (err) {
+      console.warn('[usePersonal] fetchSalud:', err.message)
+      setSalud(null)
+      return
+    }
+ 
     if (data) {
-      const row = data as { ingresos_del_negocio: unknown; ingresos_totales: unknown; pct_dependencia_negocio: unknown }
+      const row = data as {
+        ingresos_del_negocio:    unknown
+        ingresos_totales:        unknown
+        pct_dependencia_negocio: unknown
+      }
       setSalud({
         ingresos_del_negocio:    toFloat(row.ingresos_del_negocio as string),
         ingresos_totales:        toFloat(row.ingresos_totales as string),
         pct_dependencia_negocio: toFloat(row.pct_dependencia_negocio as string),
       })
+    } else {
+      // Usuario sin datos todavía — mostrar ceros
+      setSalud({ ingresos_del_negocio: 0, ingresos_totales: 0, pct_dependencia_negocio: 0 })
     }
   }, [supabase])
 

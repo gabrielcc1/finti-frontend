@@ -48,20 +48,23 @@ export function usePerfil() {
 
   const supabase = createClient()
 
-  // ── Cargar datos ──────────────────────────────────────────────────────────
   const fetchPerfil = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: authData } = await supabase.auth.getUser()
+    const user = authData?.user
     if (!user) return
 
     setEmail(user.email ?? null)
 
+    // FIX 406: .maybeSingle() devuelve null en lugar de error cuando no hay fila.
+    // .single() tira 406 si la query retorna 0 filas o más de 1.
     const { data: perfilData } = await db(supabase)
       .from('usuarios')
       .select('nombre, avatar_url, rol, negocio_id')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (!perfilData) return
+
     const row = perfilData as PerfilData & { negocio_id: string | null }
     setPerfil({ nombre: row.nombre, avatar_url: row.avatar_url, rol: row.rol })
 
@@ -70,7 +73,8 @@ export function usePerfil() {
         .from('negocios')
         .select('nombre, cuit, condicion_iva, telefono, email, direccion, tier')
         .eq('id', row.negocio_id)
-        .single()
+        .maybeSingle()
+
       if (negocioData) setNegocio(negocioData as NegocioData)
     }
   }, [supabase])
@@ -89,13 +93,13 @@ export function usePerfil() {
     void cargar()
   }, [fetchPerfil])
 
-  // ── Guardar perfil (nombre del usuario) ───────────────────────────────────
   const guardarPerfil = useCallback(async (data: PerfilUpdateLocal) => {
     setSaving(true)
     setError(null)
     setSuccess(null)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: authData } = await supabase.auth.getUser()
+      const user = authData?.user
       if (!user) throw new Error('No hay usuario')
 
       const { error: err } = await db(supabase)
@@ -114,17 +118,22 @@ export function usePerfil() {
     }
   }, [supabase])
 
-  // ── Guardar datos del negocio ─────────────────────────────────────────────
   const guardarNegocio = useCallback(async (data: NegocioUpdateLocal) => {
     setSaving(true)
     setError(null)
     setSuccess(null)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: authData } = await supabase.auth.getUser()
+      const user = authData?.user
       if (!user) throw new Error('No hay usuario')
 
+      // FIX 406: mismo patrón, .maybeSingle() en lugar de .single()
       const { data: usuarioData } = await db(supabase)
-        .from('usuarios').select('negocio_id').eq('id', user.id).single()
+        .from('usuarios')
+        .select('negocio_id')
+        .eq('id', user.id)
+        .maybeSingle()
+
       const negocioId = (usuarioData as { negocio_id: string | null } | null)?.negocio_id
       if (!negocioId) throw new Error('No se encontró el negocio')
 
@@ -144,7 +153,6 @@ export function usePerfil() {
     }
   }, [supabase])
 
-  // ── Cambiar contraseña ────────────────────────────────────────────────────
   const cambiarPassword = useCallback(async (nueva: string) => {
     setSaving(true)
     setError(null)
@@ -161,7 +169,6 @@ export function usePerfil() {
     }
   }, [supabase])
 
-  // ── Cerrar sesión ─────────────────────────────────────────────────────────
   const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
     window.location.href = '/login'
