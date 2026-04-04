@@ -6,8 +6,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { Sidebar } from '@/components/shared/Sidebar'
-import { createClient } from '@/lib/supabase/client'
 import { MenuMas } from '@/components/shared/MenuMas'
+import { createClient } from '@/lib/supabase/client'
+import { useComprobante } from '@/hooks/useComprobante'
 import type { Cliente } from '@/types/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,6 +42,14 @@ interface VentaResumen {
   total: string
   tipo_pago: string | null
   estado: string
+  // Datos completos para comprobante
+  cliente_id: string | null
+  descuento: string
+  notas: string | null
+  numero_factura: string | null
+  created_at: string
+  venta_items?: unknown[]
+  clientes?: { nombre: string; telefono: string | null } | null
 }
 
 interface CobranzaResumen {
@@ -50,6 +59,14 @@ interface CobranzaResumen {
   cant_cuotas: number
   cuotas_pagas: number
   estado: string
+  negocio_id?: string
+  cliente_id?: string | null
+  venta_id?: string | null
+  fecha_inicio?: string
+  dia_vencimiento?: number | null
+  created_at?: string
+  cuotas?: unknown[]
+  clientes?: unknown
 }
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
@@ -115,14 +132,14 @@ function ModalCliente({ cliente, t, dark, saving, onConfirm, onCancel }: {
   onConfirm: (data: NuevoClienteData) => Promise<void>
   onCancel: () => void
 }) {
-  const [nombre,        setNombre]        = useState(cliente?.nombre ?? '')
-  const [telefono,      setTelefono]      = useState(cliente?.telefono ?? '')
-  const [zona,          setZona]          = useState(cliente?.zona_comercial ?? '')
-  const [direccion,     setDireccion]     = useState(cliente?.direccion ?? '')
-  const [dni,           setDni]           = useState(cliente?.dni ?? '')
-  const [email,         setEmail]         = useState(cliente?.email ?? '')
-  const [notas,         setNotas]         = useState(cliente?.notas ?? '')
-  const [err,           setErr]           = useState('')
+  const [nombre,    setNombre]    = useState(cliente?.nombre ?? '')
+  const [telefono,  setTelefono]  = useState(cliente?.telefono ?? '')
+  const [zona,      setZona]      = useState(cliente?.zona_comercial ?? '')
+  const [direccion, setDireccion] = useState(cliente?.direccion ?? '')
+  const [dni,       setDni]       = useState(cliente?.dni ?? '')
+  const [email,     setEmail]     = useState(cliente?.email ?? '')
+  const [notas,     setNotas]     = useState(cliente?.notas ?? '')
+  const [err,       setErr]       = useState('')
 
   const inp: React.CSSProperties = {
     width: '100%', padding: '9px 12px', borderRadius: 10,
@@ -213,7 +230,6 @@ function ModalEliminar({ cliente, cantVentas, cantCobranzas, t, saving, onConfir
           <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>Eliminar cliente</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: t.redNum, marginTop: 6 }}>{cliente.nombre}</div>
         </div>
-
         {tieneData ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ padding: '12px 14px', borderRadius: 12, background: t.red, border: `1.5px solid ${t.redBorder}` }}>
@@ -227,17 +243,9 @@ function ModalEliminar({ cliente, cantVentas, cantCobranzas, t, saving, onConfir
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>
-                Para confirmar, escribí el nombre exacto del cliente:
-              </div>
-              <input
-                type="text"
-                value={confirma}
-                onChange={e => setConfirma(e.target.value)}
-                placeholder={cliente.nombre}
-                autoFocus
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${puedeEliminar && confirma ? t.redNum : t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
-              />
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Para confirmar, escribí el nombre exacto:</div>
+              <input type="text" value={confirma} onChange={e => setConfirma(e.target.value)} placeholder={cliente.nombre} autoFocus
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${puedeEliminar && confirma ? t.redNum : t.border}`, background: t.bg, color: t.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }} />
             </div>
           </div>
         ) : (
@@ -245,12 +253,9 @@ function ModalEliminar({ cliente, cantVentas, cantCobranzas, t, saving, onConfir
             Este cliente no tiene ventas ni cobranzas.<br />¿Confirmás la eliminación?
           </div>
         )}
-
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onCancel} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-          <button
-            onClick={onConfirm}
-            disabled={!puedeEliminar || saving}
+          <button onClick={onConfirm} disabled={!puedeEliminar || saving}
             style={{ flex: 1, padding: 12, borderRadius: 12, border: 'none', background: puedeEliminar ? t.redNum : t.surfaceAlt, color: puedeEliminar ? '#fff' : t.textFaint, fontSize: 13, fontWeight: 800, cursor: puedeEliminar && !saving ? 'pointer' : 'not-allowed', opacity: saving ? 0.7 : 1 }}>
             {saving ? 'Eliminando...' : '🗑 Eliminar'}
           </button>
@@ -261,52 +266,70 @@ function ModalEliminar({ cliente, cantVentas, cantCobranzas, t, saving, onConfir
 }
 
 // ── Panel de detalle lateral ──────────────────────────────────────────────────
-function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, onQuitarMoroso, onClose }: {
+function PanelDetalle({ cliente, t, dark, negocio, onEditar, onEliminar, onMarcarMoroso, onQuitarMoroso, onClose }: {
   cliente: ClienteConStats; t: Tema; dark: boolean
+  negocio: string  // nombre del negocio para comprobantes
   onEditar: () => void
   onEliminar: () => void
   onMarcarMoroso: () => void
   onQuitarMoroso: () => void
   onClose: () => void
 }) {
-  const [ventas,     setVentas]     = useState<VentaResumen[]>([])
-  const [cobranzas,  setCobranzas]  = useState<CobranzaResumen[]>([])
-  const [cargando,   setCargando]   = useState(true)
-  // FIX: useRef estabiliza la instancia entre renders. Sin esto createClient()
-  // se ejecuta en cada render → nueva instancia → RLS rechaza silenciosamente
-  // las operaciones async (especialmente delete) por contexto de sesión inconsistente.
+  const [ventas,    setVentas]    = useState<VentaResumen[]>([])
+  const [cobranzas, setCobranzas] = useState<CobranzaResumen[]>([])
+  const [cargando,  setCargando]  = useState(true)
+
+  // FIX: useRef estabiliza la instancia entre renders
   const supabaseRef = useRef(createClient())
-  const supabase = supabaseRef.current
+  const supabase    = supabaseRef.current
+
+  // Hook de comprobantes — usa el nombre del negocio
+  const comp = useComprobante({ nombre: negocio })
 
   useEffect(() => {
     const cargar = async () => {
       setCargando(true)
       try {
         const [{ data: v }, { data: c }] = await Promise.all([
-          db(supabase).from('ventas').select('id, fecha, total, tipo_pago, estado').eq('cliente_id', cliente.id).order('fecha', { ascending: false }).limit(10),
-          db(supabase).from('cobranzas').select('id, descripcion, monto_total, cant_cuotas, cuotas_pagas, estado').eq('cliente_id', cliente.id).in('estado', ['activa', 'vencida', 'mora']).order('created_at', { ascending: false }),
+          // NUEVO: traemos más campos para poder generar el comprobante
+          db(supabase).from('ventas')
+            .select('id, fecha, total, tipo_pago, estado, descuento, notas, cliente_id, numero_factura, created_at, venta_items(id, cantidad, precio_unitario, subtotal, nombre_snapshot, productos(nombre))')
+            .eq('cliente_id', cliente.id)
+            .order('fecha', { ascending: false })
+            .limit(20),
+          // NUEVO: traemos cuotas para el comprobante de cobranza
+          db(supabase).from('cobranzas')
+            .select('id, descripcion, monto_total, cant_cuotas, cuotas_pagas, estado, negocio_id, cliente_id, venta_id, fecha_inicio, dia_vencimiento, created_at, cuotas(id, numero_cuota, monto, fecha_vencimiento, fecha_pago, estado, metodo_pago, notas, intentos_cobro, ultima_notificacion_sent)')
+            .eq('cliente_id', cliente.id)
+            .in('estado', ['activa', 'vencida', 'mora', 'completada'])
+            .order('created_at', { ascending: false }),
         ])
-        setVentas((v ?? []) as VentaResumen[])
+        // Inyectar datos del cliente en las ventas para el comprobante
+        const ventasConCliente = ((v ?? []) as VentaResumen[]).map(venta => ({
+          ...venta,
+          clientes: { nombre: cliente.nombre, telefono: cliente.telefono ?? null },
+        }))
+        setVentas(ventasConCliente)
         setCobranzas((c ?? []) as CobranzaResumen[])
       } finally {
         setCargando(false)
       }
     }
     void cargar()
-  }, [cliente.id])
+  }, [cliente.id, cliente.nombre, cliente.telefono, supabase])
 
-  const labelPago: Record<string, string> = { efectivo: '💵', transferencia: '📲', tarjeta: '💳', cuotas: '📋' }
-
-  const esMoroso = cliente.es_moroso
+  const labelPago: Record<string, string> = {
+    efectivo: '💵', transferencia: '📲', tarjeta: '💳', cuotas: '📋',
+  }
+  const esMoroso       = cliente.es_moroso
   const tieneHistorial = !esMoroso && cliente.motivo_moroso?.startsWith('[NORMALIZADO]')
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: t.bg, overflowY: 'auto' }}>
 
-      {/* Header del panel */}
+      {/* ── Header del panel ────────────────────────────────────────────────── */}
       <div style={{ padding: '20px 20px 16px', background: t.surface, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-          {/* Avatar grande */}
           <div style={{
             width: 52, height: 52, borderRadius: 15, flexShrink: 0,
             background: esMoroso ? t.red : tieneHistorial ? t.amber : t.surfaceAlt,
@@ -330,11 +353,11 @@ function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, 
 
         {/* Datos de contacto */}
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {cliente.telefono && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>📱</span><span>{cliente.telefono}</span></div>}
-          {cliente.email && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>✉️</span><span>{cliente.email}</span></div>}
+          {cliente.telefono  && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>📱</span><span>{cliente.telefono}</span></div>}
+          {cliente.email     && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>✉️</span><span>{cliente.email}</span></div>}
           {cliente.direccion && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>🏠</span><span>{cliente.direccion}</span></div>}
-          {cliente.dni && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>🪪</span><span>DNI {cliente.dni}</span></div>}
-          {cliente.notas && <div style={{ marginTop: 4, padding: '7px 10px', borderRadius: 8, background: t.surfaceAlt, border: `1px solid ${t.border}`, fontSize: 11, color: t.textMuted, fontStyle: 'italic' }}>📝 {cliente.notas}</div>}
+          {cliente.dni       && <div style={{ fontSize: 12, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}><span>🪪</span><span>DNI {cliente.dni}</span></div>}
+          {cliente.notas     && <div style={{ marginTop: 4, padding: '7px 10px', borderRadius: 8, background: t.surfaceAlt, border: `1px solid ${t.border}`, fontSize: 11, color: t.textMuted, fontStyle: 'italic' }}>📝 {cliente.notas}</div>}
         </div>
 
         {/* Historial de morosidad */}
@@ -360,7 +383,7 @@ function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, 
         </div>
       </div>
 
-      {/* KPIs del cliente */}
+      {/* ── KPIs del cliente ─────────────────────────────────────────────────── */}
       <div style={{ padding: '14px 20px 0', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, padding: '11px 14px', boxShadow: t.shadow }}>
@@ -368,27 +391,34 @@ function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, 
             <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: t.text }}>{formatPeso(cliente.total_ventas)}</div>
             <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{cliente.cant_ventas} ventas</div>
           </div>
-          <div style={{ background: cobranzas.length > 0 ? t.amber : t.surface, border: `1px solid ${cobranzas.length > 0 ? t.amberBorder : t.border}`, borderRadius: 12, padding: '11px 14px', boxShadow: t.shadow }}>
-            <div style={{ fontSize: 9, color: cobranzas.length > 0 ? t.amberSub : t.textFaint, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Cobranzas activas</div>
-            <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: cobranzas.length > 0 ? t.amberSub : t.text }}>{cobranzas.length}</div>
-            <div style={{ fontSize: 10, color: cobranzas.length > 0 ? t.amberSub : t.textFaint, marginTop: 2 }}>
-              {cobranzas.length > 0 ? formatPeso(cobranzas.reduce((s, c) => s + toFloat(c.monto_total), 0)) : 'Sin deuda'}
-            </div>
+          <div style={{ background: cobranzas.filter(c => ['activa','vencida','mora'].includes(c.estado)).length > 0 ? t.amber : t.surface, border: `1px solid ${cobranzas.filter(c => ['activa','vencida','mora'].includes(c.estado)).length > 0 ? t.amberBorder : t.border}`, borderRadius: 12, padding: '11px 14px', boxShadow: t.shadow }}>
+            {(() => {
+              const activas = cobranzas.filter(c => ['activa','vencida','mora'].includes(c.estado))
+              return (
+                <>
+                  <div style={{ fontSize: 9, color: activas.length > 0 ? t.amberSub : t.textFaint, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Cobranzas activas</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: activas.length > 0 ? t.amberSub : t.text }}>{activas.length}</div>
+                  <div style={{ fontSize: 10, color: activas.length > 0 ? t.amberSub : t.textFaint, marginTop: 2 }}>
+                    {activas.length > 0 ? formatPeso(activas.reduce((s, c) => s + toFloat(c.monto_total), 0)) : 'Sin deuda'}
+                  </div>
+                </>
+              )
+            })()}
           </div>
         </div>
       </div>
 
-      {/* Contenido scrolleable */}
+      {/* ── Contenido scrolleable ─────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Cobranzas activas */}
-        {!cargando && cobranzas.length > 0 && (
+        {!cargando && cobranzas.filter(c => ['activa','vencida','mora'].includes(c.estado)).length > 0 && (
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>Cobranzas activas</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {cobranzas.map(c => {
+              {cobranzas.filter(c => ['activa','vencida','mora'].includes(c.estado)).map(c => {
                 const progreso = c.cant_cuotas > 0 ? (c.cuotas_pagas / c.cant_cuotas) * 100 : 0
-                const vencida = c.estado === 'vencida' || c.estado === 'mora'
+                const vencida  = c.estado === 'vencida' || c.estado === 'mora'
                 return (
                   <div key={c.id} style={{ padding: '10px 12px', borderRadius: 11, background: vencida ? t.red : t.surface, border: `1px solid ${vencida ? t.redBorder : t.border}`, boxShadow: t.shadow }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -397,12 +427,26 @@ function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, 
                       </div>
                       <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: vencida ? t.redNum : t.text, flexShrink: 0, marginLeft: 8 }}>{formatPeso(c.monto_total)}</div>
                     </div>
-                    <div style={{ height: 4, borderRadius: 2, background: t.border, overflow: 'hidden', marginBottom: 4 }}>
+                    <div style={{ height: 4, borderRadius: 2, background: vencida ? `${t.redNum}40` : t.border, overflow: 'hidden', marginBottom: 4 }}>
                       <div style={{ height: '100%', width: `${progreso}%`, background: vencida ? t.redNum : '#4ade80', borderRadius: 2 }} />
                     </div>
-                    <div style={{ fontSize: 10, color: vencida ? t.redNum : t.textFaint }}>
-                      {c.cuotas_pagas}/{c.cant_cuotas} cuotas pagadas
-                      {vencida && ' · 🚨 Vencida'}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                      <div style={{ fontSize: 10, color: vencida ? t.redNum : t.textFaint }}>
+                        {c.cuotas_pagas}/{c.cant_cuotas} cuotas pagadas {vencida && '· 🚨 Vencida'}
+                      </div>
+                      {/* NUEVO: Botón comprobante en cobranza activa */}
+                      <button
+                        onClick={() => comp.descargarComprobanteCobranza({
+                          ...c,
+                          clientes: { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono ?? null, es_moroso: cliente.es_moroso, motivo_moroso: cliente.motivo_moroso ?? null },
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          cuotas: (c.cuotas ?? []) as any,
+                        } as Parameters<typeof comp.descargarComprobanteCobranza>[0])}
+                        disabled={comp.generando}
+                        title="Descargar comprobante de cuotas"
+                        style={{ padding: '3px 10px', borderRadius: 7, border: `1px solid ${vencida ? t.redBorder : t.border}`, background: t.surfaceAlt, color: t.textMuted, cursor: 'pointer', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        {comp.generando ? '⏳' : '⬇'} PDF
+                      </button>
                     </div>
                   </div>
                 )
@@ -411,30 +455,84 @@ function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, 
           </div>
         )}
 
-        {/* Historial de ventas */}
+        {/* ── Historial de ventas ───────────────────────────────────────────── */}
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
             Historial de ventas {ventas.length > 0 && `(${ventas.length})`}
           </div>
           {cargando
-            ? [1, 2, 3].map(i => <div key={i} style={{ marginBottom: 8 }}><Sk h={48} t={t} /></div>)
+            ? [1, 2, 3].map(i => <div key={i} style={{ marginBottom: 8 }}><Sk h={52} t={t} /></div>)
             : ventas.length === 0
               ? <div style={{ padding: '20px 0', textAlign: 'center', color: t.textFaint, fontSize: 12 }}>Sin ventas registradas</div>
               : <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {ventas.map(v => (
                     <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: t.surface, border: `1px solid ${t.border}` }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: t.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>
+                      {/* Ícono tipo de pago */}
+                      <div style={{ width: 30, height: 30, borderRadius: 8, background: t.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
                         {labelPago[v.tipo_pago ?? 'efectivo'] ?? '💰'}
                       </div>
-                      <div style={{ flex: 1 }}>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 11, color: t.textMuted }}>{formatFechaCorta(v.fecha)}</div>
+                        {v.tipo_pago && (
+                          <div style={{ fontSize: 9, color: t.textFaint, textTransform: 'capitalize' }}>{v.tipo_pago}</div>
+                        )}
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: t.text }}>{formatPeso(v.total)}</div>
+                      {/* Monto */}
+                      <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: t.text, flexShrink: 0 }}>
+                        {formatPeso(v.total)}
+                      </div>
+                      {/* NUEVO: Botón comprobante por venta */}
+                      <button
+                        onClick={() => comp.descargarComprobanteVenta(
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          v as any
+                        )}
+                        disabled={comp.generando}
+                        title="Descargar comprobante de venta"
+                        style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, cursor: comp.generando ? 'wait' : 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: comp.generando ? 0.5 : 1 }}>
+                        {comp.generando ? '⏳' : '⬇'}
+                      </button>
                     </div>
                   ))}
                 </div>
           }
         </div>
+
+        {/* ── Historial de cobranzas completadas ───────────────────────────── */}
+        {!cargando && cobranzas.filter(c => c.estado === 'completada').length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
+              Cobranzas completadas ✓
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {cobranzas.filter(c => c.estado === 'completada').map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: t.green, border: `1px solid ${t.greenBorder}` }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: t.greenBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>✅</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: t.greenText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descripcion ?? 'Cobranza'}</div>
+                    <div style={{ fontSize: 10, color: t.greenText, opacity: 0.7 }}>{c.cant_cuotas} cuotas · {c.cant_cuotas} pagadas</div>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: t.greenText, flexShrink: 0 }}>{formatPeso(c.monto_total)}</div>
+                  {/* NUEVO: Botón comprobante en cobranza completada */}
+                  <button
+                    onClick={() => comp.descargarComprobanteCobranza({
+                      ...c,
+                      clientes: { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono ?? null, es_moroso: cliente.es_moroso, motivo_moroso: cliente.motivo_moroso ?? null },
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      cuotas: (c.cuotas ?? []) as any,
+                    } as Parameters<typeof comp.descargarComprobanteCobranza>[0])}
+                    disabled={comp.generando}
+                    title="Descargar comprobante de cuotas"
+                    style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${t.greenBorder}`, background: t.surface, color: t.greenText, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {comp.generando ? '⏳' : '⬇'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )
@@ -444,22 +542,16 @@ function PanelDetalle({ cliente, t, dark, onEditar, onEliminar, onMarcarMoroso, 
 function TarjetaCliente({ cliente, activo, t, onClick }: {
   cliente: ClienteConStats; activo: boolean; t: Tema; onClick: () => void
 }) {
-  const esMoroso = cliente.es_moroso
+  const esMoroso       = cliente.es_moroso
   const tieneHistorial = !esMoroso && cliente.motivo_moroso?.startsWith('[NORMALIZADO]')
-
   return (
-    <div
-      onClick={onClick}
-      style={{
-        padding: '13px 14px', borderRadius: 14, cursor: 'pointer',
-        background: activo ? (esMoroso ? t.red : t.surfaceAlt) : t.surface,
-        border: `1.5px solid ${activo ? (esMoroso ? t.redBorder : t.accent) : esMoroso ? t.redBorder : t.border}`,
-        boxShadow: activo ? t.shadowMd : t.shadow,
-        transition: 'all 0.15s',
-        display: 'flex', alignItems: 'center', gap: 12,
-      }}
-    >
-      {/* Avatar */}
+    <div onClick={onClick} style={{
+      padding: '13px 14px', borderRadius: 14, cursor: 'pointer',
+      background: activo ? (esMoroso ? t.red : t.surfaceAlt) : t.surface,
+      border: `1.5px solid ${activo ? (esMoroso ? t.redBorder : t.accent) : esMoroso ? t.redBorder : t.border}`,
+      boxShadow: activo ? t.shadowMd : t.shadow, transition: 'all 0.15s',
+      display: 'flex', alignItems: 'center', gap: 12,
+    }}>
       <div style={{
         width: 42, height: 42, borderRadius: 12, flexShrink: 0,
         background: esMoroso ? t.red : tieneHistorial ? t.amber : t.surfaceAlt,
@@ -470,8 +562,6 @@ function TarjetaCliente({ cliente, activo, t, onClick }: {
       }}>
         {iniciales(cliente.nombre)}
       </div>
-
-      {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cliente.nombre}</span>
@@ -483,8 +573,6 @@ function TarjetaCliente({ cliente, activo, t, onClick }: {
           {cliente.zona_comercial && <span>· {cliente.zona_comercial}</span>}
         </div>
       </div>
-
-      {/* Totales */}
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: t.text }}>{formatPeso(cliente.total_ventas)}</div>
         <div style={{ fontSize: 9, color: t.textFaint }}>{cliente.cant_ventas} ventas</div>
@@ -497,85 +585,63 @@ function TarjetaCliente({ cliente, activo, t, onClick }: {
 // HOOK LOCAL: useClientes
 // ══════════════════════════════════════════════════════════════════════════════
 function useClientes() {
-  const [clientes,  setClientes]  = useState<ClienteConStats[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [error,     setError]     = useState<string | null>(null)
+  const [clientes, setClientes] = useState<ClienteConStats[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
 
-  // FIX: useRef estabiliza la instancia entre renders. Sin esto createClient()
-  // se ejecuta en cada render → nueva instancia → RLS rechaza silenciosamente
-  // las operaciones async (especialmente delete) por contexto de sesión inconsistente.
   const supabaseRef = useRef(createClient())
-  const supabase = supabaseRef.current
+  const supabase    = supabaseRef.current
 
   const fetchClientes = useCallback(async () => {
     setLoading(true)
     try {
       const { data, error: err } = await db(supabase)
         .from('clientes')
-        .select(`
-          *,
-          ventas(total, estado),
-          cobranzas(monto_total, estado)
-        `)
+        .select(`*, ventas(total, estado), cobranzas(monto_total, estado)`)
         .order('nombre', { ascending: true })
-
       if (err) throw new Error(err.message)
-
       const lista: ClienteConStats[] = ((data ?? []) as (Cliente & {
         ventas: { total: string; estado: string }[]
         cobranzas: { monto_total: string; estado: string }[]
       })[]).map(c => {
         const ventasCompletadas = (c.ventas ?? []).filter(v => v.estado === 'completada')
         const cobranzasActivas  = (c.cobranzas ?? []).filter(cb => ['activa', 'vencida', 'mora'].includes(cb.estado))
-        const ultimaVenta = (c.ventas ?? []).length > 0 ? null : null
         return {
           ...c,
-          total_ventas:             ventasCompletadas.reduce((s, v) => s + toFloat(v.total), 0),
-          cant_ventas:              ventasCompletadas.length,
-          total_cobranzas_activas:  cobranzasActivas.reduce((s, cb) => s + toFloat(cb.monto_total), 0),
-          cant_cobranzas_activas:   cobranzasActivas.length,
-          ultima_venta:             ultimaVenta,
+          total_ventas:            ventasCompletadas.reduce((s, v) => s + toFloat(v.total), 0),
+          cant_ventas:             ventasCompletadas.length,
+          total_cobranzas_activas: cobranzasActivas.reduce((s, cb) => s + toFloat(cb.monto_total), 0),
+          cant_cobranzas_activas:  cobranzasActivas.length,
+          ultima_venta:            null,
         }
       })
-
       setClientes(lista)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar clientes')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [supabase])
 
   useEffect(() => { void fetchClientes() }, [fetchClientes])
 
-  // ── Obtener negocio_id ──────────────────────────────────────────────────────
   const getNegocioId = useCallback(async (): Promise<string> => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Sin autenticación')
-    const { data } = await db(supabase).from('usuarios').select('negocio_id').eq('id', user.id).single()
+    const { data } = await db(supabase).from('usuarios').select('negocio_id').eq('id', user.id).maybeSingle()
     const row = data as { negocio_id: string | null } | null
     if (!row?.negocio_id) throw new Error('No se encontró el negocio')
     return row.negocio_id
   }, [supabase])
 
-  // ── Crear cliente ───────────────────────────────────────────────────────────
   const crearCliente = useCallback(async (data: NuevoClienteData) => {
     setSaving(true)
     try {
       const negocioId = await getNegocioId()
       const insert = {
-        negocio_id:    negocioId,
-        nombre:        data.nombre,
-        telefono:      data.telefono || null,
-        zona_comercial: data.zona_comercial || null,
-        direccion:     data.direccion || null,
-        dni:           data.dni || null,
-        email:         data.email || null,
-        notas:         data.notas || null,
-        es_moroso:     false,
-        motivo_moroso: null,
-        score_interno: 0,
+        negocio_id: negocioId, nombre: data.nombre, telefono: data.telefono || null,
+        zona_comercial: data.zona_comercial || null, direccion: data.direccion || null,
+        dni: data.dni || null, email: data.email || null, notas: data.notas || null,
+        es_moroso: false, motivo_moroso: null, score_interno: 0,
       }
       const { error: err } = await db(supabase).from('clientes').insert(insert)
       if (err) throw new Error(err.message)
@@ -583,18 +649,13 @@ function useClientes() {
     } finally { setSaving(false) }
   }, [supabase, getNegocioId, fetchClientes])
 
-  // ── Editar cliente ──────────────────────────────────────────────────────────
   const editarCliente = useCallback(async (id: string, data: NuevoClienteData) => {
     setSaving(true)
     try {
       const update = {
-        nombre:        data.nombre,
-        telefono:      data.telefono || null,
-        zona_comercial: data.zona_comercial || null,
-        direccion:     data.direccion || null,
-        dni:           data.dni || null,
-        email:         data.email || null,
-        notas:         data.notas || null,
+        nombre: data.nombre, telefono: data.telefono || null,
+        zona_comercial: data.zona_comercial || null, direccion: data.direccion || null,
+        dni: data.dni || null, email: data.email || null, notas: data.notas || null,
       }
       const { error: err } = await db(supabase).from('clientes').update(update).eq('id', id)
       if (err) throw new Error(err.message)
@@ -602,71 +663,30 @@ function useClientes() {
     } finally { setSaving(false) }
   }, [supabase, fetchClientes])
 
-  // ── Eliminar cliente ────────────────────────────────────────────────────────
   const eliminarCliente = useCallback(async (id: string) => {
     setSaving(true)
     setError(null)
     try {
-      // ── Diagnóstico de sesión ───────────────────────────────────────────────
       const { data: { user } } = await supabase.auth.getUser()
-      console.log('[eliminarCliente] user:', user?.id ?? 'NULL — SIN SESIÓN')
       if (!user) throw new Error('Sin sesión activa. Volvé a iniciar sesión.')
-
-      // Verificar que get_my_business_id() retorna algo válido
-      const { data: negocioCheck, error: negErr } = await (supabase as any)
-        .rpc('get_my_business_id')
-      console.log('[eliminarCliente] get_my_business_id:', negocioCheck, 'error:', negErr)
-      if (!negocioCheck) throw new Error('RLS: get_my_business_id() retornó null. Verificá la tabla usuarios.')
-
-      // ── 1. Desvincular ventas ───────────────────────────────────────────────
-      const { error: errV, count: cV } = await (supabase as any)
-        .from('ventas')
-        .update({ cliente_id: null })
-        .eq('cliente_id', id)
-        .select('id', { count: 'exact', head: true })
-      console.log('[eliminarCliente] desvincular ventas — error:', errV, 'count:', cV)
+      const { data: negocioCheck } = await (supabase as any).rpc('get_my_business_id')
+      if (!negocioCheck) throw new Error('RLS: get_my_business_id() retornó null.')
+      const { error: errV } = await (supabase as any).from('ventas').update({ cliente_id: null }).eq('cliente_id', id)
       if (errV) throw new Error(`Error al desvincular ventas: ${errV.message}`)
-
-      // ── 2. Desvincular cobranzas ────────────────────────────────────────────
-      const { error: errC, count: cC } = await (supabase as any)
-        .from('cobranzas')
-        .update({ cliente_id: null })
-        .eq('cliente_id', id)
-        .select('id', { count: 'exact', head: true })
-      console.log('[eliminarCliente] desvincular cobranzas — error:', errC, 'count:', cC)
+      const { error: errC } = await (supabase as any).from('cobranzas').update({ cliente_id: null }).eq('cliente_id', id)
       if (errC) throw new Error(`Error al desvincular cobranzas: ${errC.message}`)
-
-      // ── 3. Eliminar el cliente ──────────────────────────────────────────────
-      const deleteResult = await (supabase as any)
-        .from('clientes')
-        .delete()
-        .eq('id', id)
-        .select('id')   // select() después de delete() devuelve las filas eliminadas
-      console.log('[eliminarCliente] delete result completo:', JSON.stringify(deleteResult))
-
+      const deleteResult = await (supabase as any).from('clientes').delete().eq('id', id).select('id')
       if (deleteResult.error) throw new Error(`Error al eliminar: ${deleteResult.error.message}`)
-
-      // Si data es array vacío → RLS bloqueó el delete (no hay error pero tampoco eliminó)
-      if (!deleteResult.data || deleteResult.data.length === 0) {
-        throw new Error('El cliente no se pudo eliminar. Verificá que pertenece a tu negocio (RLS). Revisá la consola del navegador para más detalles.')
-      }
-
-      console.log('[eliminarCliente] ✓ eliminado correctamente, filas afectadas:', deleteResult.data.length)
-
-      // Actualizar estado local y sincronizar con la BD
+      if (!deleteResult.data || deleteResult.data.length === 0) throw new Error('El cliente no se pudo eliminar. Verificá RLS.')
       setClientes(prev => prev.filter(c => c.id !== id))
       await fetchClientes()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al eliminar cliente'
       setError(msg)
-      console.error('[eliminarCliente] ERROR:', err)
       throw err
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }, [supabase, fetchClientes])
 
-  // ── Marcar moroso ───────────────────────────────────────────────────────────
   const marcarMoroso = useCallback(async (id: string, motivo: string) => {
     setSaving(true)
     try {
@@ -675,7 +695,6 @@ function useClientes() {
     } finally { setSaving(false) }
   }, [supabase])
 
-  // ── Quitar moroso ───────────────────────────────────────────────────────────
   const quitarMoroso = useCallback(async (id: string) => {
     setSaving(true)
     try {
@@ -704,13 +723,11 @@ function ModalProblematico({ nombre, t, onConfirm, onCancel, saving }: {
   ]
   const [sel,     setSel]     = useState('no_pago')
   const [detalle, setDetalle] = useState('')
-
   const motivoTexto: Record<string, string> = {
     no_pago: 'No pagó cuotas', no_retiro_pedido: 'No retiró pedido',
     no_responde: 'No responde', cheque_rechazado: 'Cheque rechazado',
     otro: detalle || 'Otro motivo',
   }
-
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 20, padding: '24px 22px', maxWidth: 360, width: '100%', boxShadow: t.shadowMd, animation: 'popIn 0.18s ease' }}>
@@ -743,22 +760,18 @@ function ModalProblematico({ nombre, t, onConfirm, onCancel, saving }: {
 // CLIENTES VIEW PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════════════
 export function ClientesView({ usuario }: ClientesViewProps) {
-  const [dark, setDark] = useDarkMode()
-  const [isMobile,   setIsMobile]   = useState(false)
+  const [dark,    setDark]    = useDarkMode()
+  const [isMobile, setIsMobile] = useState(false)
   const router = useRouter()
+  const hook   = useClientes()
 
-  const hook = useClientes()
-
-  // Modales
-  const [modalNuevo,      setModalNuevo]      = useState(false)
-  const [modalEditar,     setModalEditar]     = useState<ClienteConStats | null>(null)
-  const [modalEliminar,   setModalEliminar]   = useState<ClienteConStats | null>(null)
-  const [modalMoroso,     setModalMoroso]     = useState<ClienteConStats | null>(null)
-  const [clienteDetalle,  setClienteDetalle]  = useState<ClienteConStats | null>(null)
-
-  // Filtros y búsqueda
-  const [busqueda,  setBusqueda]  = useState('')
-  const [filtro,    setFiltro]    = useState<'todos' | 'morosos' | 'con_deuda'>('todos')
+  const [modalNuevo,     setModalNuevo]     = useState(false)
+  const [modalEditar,    setModalEditar]    = useState<ClienteConStats | null>(null)
+  const [modalEliminar,  setModalEliminar]  = useState<ClienteConStats | null>(null)
+  const [modalMoroso,    setModalMoroso]    = useState<ClienteConStats | null>(null)
+  const [clienteDetalle, setClienteDetalle] = useState<ClienteConStats | null>(null)
+  const [busqueda,       setBusqueda]       = useState('')
+  const [filtro,         setFiltro]         = useState<'todos' | 'morosos' | 'con_deuda'>('todos')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -768,7 +781,6 @@ export function ClientesView({ usuario }: ClientesViewProps) {
 
   const t = dark ? tema.dark : tema.light
 
-  // Filtrado
   const clientesFiltrados = hook.clientes
     .filter(c => {
       if (filtro === 'morosos')   return c.es_moroso
@@ -787,50 +799,34 @@ export function ClientesView({ usuario }: ClientesViewProps) {
       )
     })
 
-  // KPIs
   const kpis = [
-    { label: 'Total clientes',  value: String(hook.clientes.length),                                icon: '👥', color: t.text },
-    { label: 'Con deuda activa', value: String(hook.clientes.filter(c => c.cant_cobranzas_activas > 0).length), icon: '💸', color: t.amberSub },
-    { label: 'Problemáticos',   value: String(hook.clientes.filter(c => c.es_moroso).length),       icon: '🚨', color: t.redNum },
-    { label: 'Zonas',           value: String(new Set(hook.clientes.map(c => c.zona_comercial).filter(Boolean)).size), icon: '📍', color: t.blueText },
+    { label: 'Total clientes',   value: String(hook.clientes.length),                                                     icon: '👥', color: t.text },
+    { label: 'Con deuda activa', value: String(hook.clientes.filter(c => c.cant_cobranzas_activas > 0).length),           icon: '💸', color: t.amberSub },
+    { label: 'Problemáticos',    value: String(hook.clientes.filter(c => c.es_moroso).length),                            icon: '🚨', color: t.redNum },
+    { label: 'Zonas',            value: String(new Set(hook.clientes.map(c => c.zona_comercial).filter(Boolean)).size),   icon: '📍', color: t.blueText },
   ]
 
-  const handleCrearCliente = async (data: NuevoClienteData) => {
-    await hook.crearCliente(data)
-    setModalNuevo(false)
-  }
-
+  const handleCrearCliente  = async (data: NuevoClienteData) => { await hook.crearCliente(data); setModalNuevo(false) }
   const handleEditarCliente = async (data: NuevoClienteData) => {
     if (!modalEditar) return
     await hook.editarCliente(modalEditar.id, data)
     setModalEditar(null)
-    if (clienteDetalle?.id === modalEditar.id) {
-      setClienteDetalle(prev => prev ? { ...prev, ...data } as ClienteConStats : null)
-    }
+    if (clienteDetalle?.id === modalEditar.id) setClienteDetalle(prev => prev ? { ...prev, ...data } as ClienteConStats : null)
   }
-
   const handleEliminarCliente = async () => {
     if (!modalEliminar) return
     try {
       await hook.eliminarCliente(modalEliminar.id)
-      // Solo cerrar el modal si la eliminación fue exitosa
       if (clienteDetalle?.id === modalEliminar.id) setClienteDetalle(null)
       setModalEliminar(null)
-    } catch {
-      // El error ya fue seteado en hook.error por eliminarCliente
-      // No cerramos el modal para que el usuario vea qué pasó
-    }
+    } catch { /* error ya seteado en hook */ }
   }
-
   const handleMarcarMoroso = async (motivo: string) => {
     if (!modalMoroso) return
     await hook.marcarMoroso(modalMoroso.id, motivo)
     setModalMoroso(null)
-    if (clienteDetalle?.id === modalMoroso.id) {
-      setClienteDetalle(prev => prev ? { ...prev, es_moroso: true, motivo_moroso: motivo } : null)
-    }
+    if (clienteDetalle?.id === modalMoroso.id) setClienteDetalle(prev => prev ? { ...prev, es_moroso: true, motivo_moroso: motivo } : null)
   }
-
   const handleQuitarMoroso = async (id: string) => {
     await hook.quitarMoroso(id)
     if (clienteDetalle?.id === id) {
@@ -845,9 +841,7 @@ export function ClientesView({ usuario }: ClientesViewProps) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Topbar */}
       <div style={{ height: 54, background: t.surface, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0 }}>
-        {isMobile && (
-          <button onClick={() => router.push('/dashboard')} style={{ marginRight: 12, background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: 18 }}>←</button>
-        )}
+        {isMobile && <button onClick={() => router.push('/dashboard')} style={{ marginRight: 12, background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: 18 }}>←</button>}
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Clientes</div>
           <div style={{ fontSize: 10, color: t.textMuted }}>{hook.clientes.length} registrados · {hook.clientes.filter(c => c.es_moroso).length} problemáticos</div>
@@ -878,23 +872,11 @@ export function ClientesView({ usuario }: ClientesViewProps) {
 
       {/* Buscador y filtros */}
       <div style={{ padding: '12px 20px 0', display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
+        <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)}
           placeholder="🔍 Buscar por nombre, teléfono, zona..."
-          style={{
-            flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 10,
-            border: `1.5px solid ${t.border}`, background: t.surfaceAlt,
-            color: t.text, fontSize: 12, outline: 'none', fontFamily: 'inherit',
-          }}
-        />
+          style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${t.border}`, background: t.surfaceAlt, color: t.text, fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
         <div style={{ display: 'flex', gap: 5 }}>
-          {([
-            ['todos',     'Todos'],
-            ['morosos',   '🚨 Problemáticos'],
-            ['con_deuda', '💸 Con deuda'],
-          ] as const).map(([key, label]) => (
+          {([['todos','Todos'],['morosos','🚨 Problemáticos'],['con_deuda','💸 Con deuda']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setFiltro(key)}
               style={{ padding: '7px 13px', borderRadius: 20, border: `1.5px solid ${filtro === key ? t.accent : t.border}`, background: filtro === key ? t.surfaceAlt : 'transparent', color: filtro === key ? t.accent : t.textMuted, fontSize: 11, fontWeight: filtro === key ? 700 : 400, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               {label}
@@ -908,21 +890,14 @@ export function ClientesView({ usuario }: ClientesViewProps) {
         {hook.loading
           ? [1, 2, 3, 4, 5].map(i => <Sk key={i} h={70} radius={14} t={t} />)
           : clientesFiltrados.length === 0
-            ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: t.textFaint }}>
+            ? <div style={{ textAlign: 'center', padding: '60px 20px', color: t.textFaint }}>
                 <div style={{ fontSize: 44, marginBottom: 14 }}>{busqueda ? '🔍' : '👥'}</div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: t.textMuted }}>{busqueda ? `Sin resultados para "${busqueda}"` : 'Sin clientes registrados'}</div>
                 {!busqueda && <div style={{ fontSize: 12, marginTop: 6 }}>Creá tu primer cliente con el botón ＋</div>}
               </div>
-            )
             : clientesFiltrados.map(c => (
-                <TarjetaCliente
-                  key={c.id}
-                  cliente={c}
-                  activo={clienteDetalle?.id === c.id}
-                  t={t}
-                  onClick={() => setClienteDetalle(clienteDetalle?.id === c.id ? null : c)}
-                />
+                <TarjetaCliente key={c.id} cliente={c} activo={clienteDetalle?.id === c.id} t={t}
+                  onClick={() => setClienteDetalle(clienteDetalle?.id === c.id ? null : c)} />
               ))
         }
       </div>
@@ -931,8 +906,7 @@ export function ClientesView({ usuario }: ClientesViewProps) {
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: t.navBg, backdropFilter: 'blur(16px)', borderTop: `1px solid ${t.border}`, padding: '10px 0 20px', display: 'flex', justifyContent: 'space-around', zIndex: 50 }}>
           {([['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['👥','Clientes','/clientes'],['▦','Stock','/stock']] as [string,string,string][]).map(([icon, label, href]) => (
-            <div key={label} onClick={() => router.push(href)}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <div key={label} onClick={() => router.push(href)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
               <div style={{ fontSize: 18, color: label === 'Clientes' ? t.accent : t.textFaint }}>{icon}</div>
               <div style={{ fontSize: 9, color: label === 'Clientes' ? t.accent : t.textFaint, fontWeight: label === 'Clientes' ? 700 : 400 }}>{label}</div>
               {label === 'Clientes' && <div style={{ width: 4, height: 4, borderRadius: '50%', background: t.accent }} />}
@@ -968,6 +942,7 @@ export function ClientesView({ usuario }: ClientesViewProps) {
               <PanelDetalle
                 cliente={hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle}
                 t={t} dark={dark}
+                negocio={usuario.negocio}
                 onEditar={() => setModalEditar(hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle)}
                 onEliminar={() => setModalEliminar(hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle)}
                 onMarcarMoroso={() => setModalMoroso(hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle)}
@@ -977,11 +952,11 @@ export function ClientesView({ usuario }: ClientesViewProps) {
             </div>
           </>
         ) : isMobile && clienteDetalle ? (
-          // Mobile: panel detalle ocupa toda la pantalla
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <PanelDetalle
               cliente={hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle}
               t={t} dark={dark}
+              negocio={usuario.negocio}
               onEditar={() => setModalEditar(hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle)}
               onEliminar={() => setModalEliminar(hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle)}
               onMarcarMoroso={() => setModalMoroso(hook.clientes.find(c => c.id === clienteDetalle.id) ?? clienteDetalle)}
@@ -997,29 +972,14 @@ export function ClientesView({ usuario }: ClientesViewProps) {
       </div>
 
       {/* Modales */}
-      {modalNuevo && (
-        <ModalCliente t={t} dark={dark} saving={hook.saving} onConfirm={handleCrearCliente} onCancel={() => setModalNuevo(false)} />
-      )}
-      {modalEditar && (
-        <ModalCliente cliente={modalEditar} t={t} dark={dark} saving={hook.saving} onConfirm={handleEditarCliente} onCancel={() => setModalEditar(null)} />
-      )}
+      {modalNuevo && <ModalCliente t={t} dark={dark} saving={hook.saving} onConfirm={handleCrearCliente} onCancel={() => setModalNuevo(false)} />}
+      {modalEditar && <ModalCliente cliente={modalEditar} t={t} dark={dark} saving={hook.saving} onConfirm={handleEditarCliente} onCancel={() => setModalEditar(null)} />}
       {modalEliminar && (
-        <ModalEliminar
-          cliente={modalEliminar}
-          cantVentas={modalEliminar.cant_ventas}
-          cantCobranzas={modalEliminar.cant_cobranzas_activas}
-          t={t} saving={hook.saving}
-          onConfirm={handleEliminarCliente}
-          onCancel={() => setModalEliminar(null)}
-        />
+        <ModalEliminar cliente={modalEliminar} cantVentas={modalEliminar.cant_ventas} cantCobranzas={modalEliminar.cant_cobranzas_activas}
+          t={t} saving={hook.saving} onConfirm={handleEliminarCliente} onCancel={() => setModalEliminar(null)} />
       )}
       {modalMoroso && (
-        <ModalProblematico
-          nombre={modalMoroso.nombre}
-          t={t} saving={hook.saving}
-          onConfirm={handleMarcarMoroso}
-          onCancel={() => setModalMoroso(null)}
-        />
+        <ModalProblematico nombre={modalMoroso.nombre} t={t} saving={hook.saving} onConfirm={handleMarcarMoroso} onCancel={() => setModalMoroso(null)} />
       )}
     </>
   )

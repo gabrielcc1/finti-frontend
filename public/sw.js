@@ -1,11 +1,10 @@
 // public/sw.js
-// Service Worker de Finti — cache básico para funcionamiento offline
-// Estrategia: Cache First para assets estáticos, Network First para datos
+// Service Worker de Finti — cache offline + push notifications completas
+// v2.0 — agrega notificaciones ricas con acciones y tipos
 
 const CACHE_NAME = 'finti-v1'
 const CACHE_STATIC = 'finti-static-v1'
 
-// Assets que se cachean en la instalación (shell de la app)
 const STATIC_ASSETS = [
   '/',
   '/dashboard',
@@ -19,12 +18,10 @@ const STATIC_ASSETS = [
   '/manifest.json',
 ]
 
-// ── Instalación: pre-cachear assets estáticos ─────────────────────────────────
+// ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_STATIC).then(cache => {
-      console.log('[SW] Pre-cacheando assets...')
-      // No falla si algún asset no está disponible
       return Promise.allSettled(
         STATIC_ASSETS.map(url => cache.add(url).catch(() => null))
       )
@@ -32,7 +29,7 @@ self.addEventListener('install', event => {
   )
 })
 
-// ── Activación: limpiar caches viejos ────────────────────────────────────────
+// ── Activate ──────────────────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -45,25 +42,20 @@ self.addEventListener('activate', event => {
   )
 })
 
-// ── Fetch: estrategia por tipo de request ────────────────────────────────────
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Ignorar requests de Supabase y APIs externas (siempre online)
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('supabase.com') ||
     url.hostname.includes('googleapis.com') ||
     url.pathname.startsWith('/api/')
-  ) {
-    return // dejar pasar al network sin interceptar
-  }
+  ) return
 
-  // Ignorar requests que no son GET
   if (request.method !== 'GET') return
 
-  // Para navegación (HTML pages): Network First con fallback offline
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -72,7 +64,6 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Para assets estáticos (JS, CSS, imágenes, fuentes): Cache First
   if (
     url.pathname.includes('/_next/static/') ||
     url.pathname.includes('/icons/') ||
@@ -99,7 +90,7 @@ self.addEventListener('fetch', event => {
   }
 })
 
-// ── Push Notifications (preparado para el futuro) ────────────────────────────
+// ── Push: notificaciones ricas por tipo ───────────────────────────────────────
 self.addEventListener('push', event => {
   if (!event.data) return
 
@@ -107,33 +98,119 @@ self.addEventListener('push', event => {
   try {
     data = event.data.json()
   } catch {
-    data = { title: 'Finti', body: event.data.text() }
+    data = { title: 'Finti', body: event.data.text(), type: 'general' }
   }
 
+  const tipo = data.type || 'general'
+
+  const configs = {
+    cuota_vence_hoy: {
+      tag:                'cuotas-hoy',
+      vibrate:            [200, 100, 200],
+      requireInteraction: true,
+      actions: [
+        { action: 'abrir',  title: '💰 Ver cobros' },
+        { action: 'cerrar', title: 'Después' },
+      ],
+    },
+    cuota_vencida: {
+      tag:                'cuotas-vencidas',
+      vibrate:            [300, 100, 300, 100, 300],
+      requireInteraction: true,
+      actions: [
+        { action: 'abrir',  title: '🚨 Ver morosos' },
+        { action: 'cerrar', title: 'Ignorar' },
+      ],
+    },
+    pedido_entrega_hoy: {
+      tag:                'pedidos-hoy',
+      vibrate:            [200, 100, 200],
+      requireInteraction: true,
+      actions: [
+        { action: 'abrir',  title: '📦 Ver pedidos' },
+        { action: 'cerrar', title: 'Después' },
+      ],
+    },
+    pago_confirmado: {
+      tag:                'pago-' + Date.now(),
+      vibrate:            [100, 50, 100],
+      requireInteraction: false,
+      actions:            [],
+    },
+    stock_critico: {
+      tag:                'stock-critico',
+      vibrate:            [200, 100, 200],
+      requireInteraction: false,
+      actions: [
+        { action: 'abrir', title: '📦 Ver stock' },
+      ],
+    },
+    general: {
+      tag:                'finti-general',
+      vibrate:            [200, 100, 200],
+      requireInteraction: false,
+      actions:            [],
+    },
+  }
+
+  const cfg = configs[tipo] || configs.general
+
   const options = {
-    body:    data.body ?? 'Tenés notificaciones nuevas',
-    icon:    '/icons/icon-192x192.png',
-    badge:   '/icons/icon-96x96.png',
-    vibrate: [200, 100, 200],
-    tag:     data.tag ?? 'finti-notification',
-    data:    { url: data.url ?? '/dashboard' },
-    actions: data.actions ?? [],
+    body:               data.body || 'Tenés notificaciones nuevas',
+    icon:               '/icons/icon-192x192.png',
+    badge:              '/icons/icon-96x96.png',
+    vibrate:            cfg.vibrate,
+    tag:                cfg.tag,
+    renotify:           true,
+    requireInteraction: cfg.requireInteraction,
+    actions:            cfg.actions,
+    data: {
+      url:  data.url || '/dashboard',
+      type: tipo,
+    },
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'Finti', options)
+    self.registration.showNotification(data.title || 'Finti', options)
   )
 })
 
-// Click en notificación → navegar a la URL correspondiente
+// ── NotificationClick ─────────────────────────────────────────────────────────
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const url = event.notification.data?.url ?? '/dashboard'
+
+  if (event.action === 'cerrar') return
+
+  const { url } = event.notification.data || {}
+  const destino = url || '/dashboard'
+
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      const existing = windowClients.find(c => c.url.includes(url) && 'focus' in c)
-      if (existing) return existing.focus()
-      return clients.openWindow(url)
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const client of list) {
+        const clientUrl = new URL(client.url)
+        if (clientUrl.origin === self.location.origin && 'focus' in client) {
+          client.focus()
+          return client.navigate(destino)
+        }
+      }
+      return clients.openWindow(destino)
     })
+  )
+})
+
+// ── PushSubscriptionChange: renovar si expira ─────────────────────────────────
+self.addEventListener('pushsubscriptionchange', event => {
+  event.waitUntil(
+    self.registration.pushManager
+      .subscribe({
+        userVisibleOnly:      true,
+        applicationServerKey: event.oldSubscription?.options?.applicationServerKey,
+      })
+      .then(newSub => fetch('/api/push/subscribe', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ subscription: newSub, renewed: true }),
+      }))
+      .catch(err => console.error('[SW] Error renovando suscripción:', err))
   )
 })

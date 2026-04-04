@@ -5,11 +5,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Producto, MateriaPrima } from '@/types/database'
 
-// ── Tipos locales (evitan depender del tipado generado del cliente) ──────────
-// El cliente de Supabase tipado con Database puede resolver ciertas tablas
-// como 'never' si hay un mismatch entre el schema generado y la versión del
-// cliente. Definir los tipos acá es la solución más robusta y mantenible.
-
 export type TipoMovimiento =
   | 'entrada_compra'
   | 'entrada_produccion'
@@ -44,7 +39,7 @@ export interface NuevoProductoData {
 export interface AjusteStockData {
   producto_id: string
   tipo: TipoMovimiento
-  cantidad: number       // positivo siempre — el tipo indica si suma o resta
+  cantidad: number
   motivo?: string
 }
 
@@ -63,7 +58,7 @@ export interface CompraMateriaPrimaData {
   proveedor?: string
 }
 
-// ── Interfaces de Insert/Update definidas localmente ────────────────────────
+// Interfaces locales
 interface ProductoInsertLocal {
   negocio_id: string
   nombre: string
@@ -76,6 +71,7 @@ interface ProductoInsertLocal {
   unidad: string
   activo: boolean
 }
+
 interface ProductoUpdateLocal {
   nombre?: string
   descripcion?: string | null
@@ -86,6 +82,7 @@ interface ProductoUpdateLocal {
   stock_minimo?: number
   unidad?: string
 }
+
 interface MateriaPrimaInsertLocal {
   negocio_id: string
   nombre: string
@@ -94,6 +91,7 @@ interface MateriaPrimaInsertLocal {
   stock_actual?: string
   stock_minimo?: string
 }
+
 interface MateriaPrimaUpdateLocal {
   nombre?: string
   unidad?: string
@@ -101,6 +99,7 @@ interface MateriaPrimaUpdateLocal {
   stock_minimo?: string
   costo_por_unidad?: string
 }
+
 interface CompraMpInsertLocal {
   negocio_id: string
   materia_prima_id: string
@@ -109,6 +108,7 @@ interface CompraMpInsertLocal {
   fecha: string
   proveedor?: string | null
 }
+
 interface MovimientoInsertLocal {
   negocio_id: string
   producto_id: string
@@ -120,25 +120,44 @@ interface MovimientoInsertLocal {
   usuario_id: string | null
 }
 
-// ── db(): acceso sin tipado estricto, acotado a este archivo ────────────────
-// Centraliza el cast en un solo lugar. Todo el resto del código usa tipos
-// explícitos definidos arriba, así que no se pierde seguridad real.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = (supabase: ReturnType<typeof createClient>) => supabase as any
 
-// ── Helper negocio_id ──────────────────────────────────────────────────────
+// ── getNegocioId mejorado con logs claros ─────────────────────────────
 async function getNegocioId(supabase: ReturnType<typeof createClient>): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No hay usuario autenticado')
-  const { data } = await db(supabase).from('usuarios').select('negocio_id').eq('id', user.id).single()
+
+  console.log('[Stock] Buscando negocio para usuario:', user.id)
+
+  const { data, error } = await db(supabase)
+    .from('usuarios')
+    .select('negocio_id')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[Stock] Error al consultar usuarios:', error)
+    throw new Error(`Error al buscar perfil: ${error.message}`)
+  }
+
+  if (!data) {
+    console.error('[Stock] No se encontró fila en usuarios')
+    throw new Error('No se encontró tu perfil de usuario. Contactá al administrador.')
+  }
+
   const row = data as { negocio_id: string | null } | null
-  if (!row?.negocio_id) throw new Error('No se encontró el negocio')
+  if (!row?.negocio_id) {
+    console.error('[Stock] Usuario sin negocio_id')
+    throw new Error('Tu perfil no tiene un negocio asignado. Contactá al administrador.')
+  }
+
+  console.log('[Stock] Negocio encontrado:', row.negocio_id)
   return row.negocio_id
 }
 
 const toFloat = (v: string | number | null | undefined) => parseFloat(String(v ?? 0)) || 0
 
-// ── Helper insertar movimiento ─────────────────────────────────────────────
 async function insertarMovimiento(
   supabase: ReturnType<typeof createClient>,
   mov: MovimientoInsertLocal
@@ -158,7 +177,6 @@ export function useStock() {
 
   const supabase = createClient()
 
-  // ── Fetch productos ────────────────────────────────────────────────────────
   const fetchProductos = useCallback(async (): Promise<void> => {
     const { data, error: err } = await db(supabase)
       .from('productos').select('*').eq('activo', true).order('nombre')
@@ -166,7 +184,6 @@ export function useStock() {
     setProductos((data as Producto[]) ?? [])
   }, [supabase])
 
-  // ── Fetch materias primas ──────────────────────────────────────────────────
   const fetchMaterias = useCallback(async (): Promise<void> => {
     const { data, error: err } = await db(supabase)
       .from('materias_primas').select('*').order('nombre')
@@ -174,7 +191,6 @@ export function useStock() {
     setMaterias((data as MateriaPrima[]) ?? [])
   }, [supabase])
 
-  // ── Fetch historial de movimientos (último mes) ────────────────────────────
   const fetchMovimientos = useCallback(async (): Promise<void> => {
     const desde = new Date()
     desde.setDate(desde.getDate() - 30)
@@ -188,7 +204,6 @@ export function useStock() {
     setMovimientos((data as MovimientoStock[]) ?? [])
   }, [supabase])
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     const cargar = async () => {
       try {
@@ -203,7 +218,8 @@ export function useStock() {
     void cargar()
   }, [fetchProductos, fetchMaterias, fetchMovimientos])
 
-  // ── Ajustar stock de producto terminado ───────────────────────────────────
+  // ── FUNCIONES PRINCIPALES ───────────────────────────────────────────────────
+
   const ajustarStock = useCallback(async (data: AjusteStockData): Promise<void> => {
     setSaving(true)
     try {
@@ -219,13 +235,11 @@ export function useStock() {
         ? stockAnterior + data.cantidad
         : Math.max(0, stockAnterior - data.cantidad)
 
-      // Actualizar stock del producto
       const update: ProductoUpdateLocal = { stock_actual: stockNuevo }
       const { error: errP } = await db(supabase)
         .from('productos').update(update).eq('id', data.producto_id)
       if (errP) throw new Error(`actualizar stock: ${errP.message}`)
 
-      // Registrar movimiento
       await insertarMovimiento(supabase, {
         negocio_id:     negocioId,
         producto_id:    data.producto_id,
@@ -237,7 +251,6 @@ export function useStock() {
         usuario_id:     user?.id ?? null,
       })
 
-      // Actualizar estado local inmediatamente
       setProductos(prev => prev.map(p =>
         p.id === data.producto_id ? { ...p, stock_actual: stockNuevo } : p
       ))
@@ -247,7 +260,6 @@ export function useStock() {
     }
   }, [supabase, productos, fetchMovimientos])
 
-  // ── Crear producto nuevo ───────────────────────────────────────────────────
   const crearProducto = useCallback(async (data: NuevoProductoData): Promise<Producto> => {
     setSaving(true)
     try {
@@ -265,13 +277,14 @@ export function useStock() {
         unidad:          data.unidad,
         activo:          true,
       }
+
       const { data: raw, error: err } = await db(supabase)
-        .from('productos').insert(insert).select().single()
-      if (err || !raw) throw new Error(`crear producto: ${err?.message}`)
+        .from('productos').insert(insert).select().maybeSingle()
+
+      if (err || !raw) throw new Error(`crear producto: ${err?.message ?? 'Sin respuesta'}`)
 
       const nuevo = raw as Producto
 
-      // Si tiene stock inicial, registrar el movimiento
       if (data.stock_actual > 0) {
         const { data: { user } } = await supabase.auth.getUser()
         await insertarMovimiento(supabase, {
@@ -293,7 +306,6 @@ export function useStock() {
     }
   }, [supabase])
 
-  // ── Editar producto ────────────────────────────────────────────────────────
   const editarProducto = useCallback(async (
     id: string,
     data: Partial<NuevoProductoData>
@@ -326,7 +338,6 @@ export function useStock() {
     }
   }, [supabase])
 
-  // ── Crear materia prima ────────────────────────────────────────────────────
   const crearMateriaPrima = useCallback(async (data: NuevaMateriaPrimaData): Promise<MateriaPrima> => {
     setSaving(true)
     try {
@@ -340,8 +351,8 @@ export function useStock() {
         stock_minimo:     data.stock_minimo.toString(),
       }
       const { data: raw, error: err } = await db(supabase)
-        .from('materias_primas').insert(insert).select().single()
-      if (err || !raw) throw new Error(`crear MP: ${err?.message}`)
+        .from('materias_primas').insert(insert).select().maybeSingle()
+      if (err || !raw) throw new Error(`crear MP: ${err?.message ?? 'Sin respuesta'}`)
       const nueva = raw as MateriaPrima
       setMaterias(prev => [...prev, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre)))
       return nueva
@@ -350,7 +361,6 @@ export function useStock() {
     }
   }, [supabase])
 
-  // ── Editar materia prima ───────────────────────────────────────────────────
   const editarMateriaPrima = useCallback(async (
     id: string,
     data: NuevaMateriaPrimaData
@@ -368,7 +378,6 @@ export function useStock() {
         .from('materias_primas').update(update).eq('id', id)
       if (err) throw new Error(`editar MP: ${err.message}`)
 
-      // Si cambió el costo, recalcular productos que usan esta MP
       const mpAnterior = materias.find(m => m.id === id)
       if (mpAnterior && toFloat(mpAnterior.costo_por_unidad) !== data.costo_por_unidad) {
         const { data: recetas } = await db(supabase)
@@ -388,25 +397,19 @@ export function useStock() {
     } finally { setSaving(false) }
   }, [supabase, materias, fetchProductos])
 
-  // ── Eliminar materia prima ─────────────────────────────────────────────────
   const eliminarMateriaPrima = useCallback(async (id: string): Promise<void> => {
     setSaving(true)
     try {
-      // 1. Eliminar recetas que la usen (FK: recetas.materia_prima_id)
       await db(supabase).from('recetas').delete().eq('materia_prima_id', id)
-      // 2. Eliminar historial de compras de esta MP (FK: compras_materia_prima.materia_prima_id)
       await db(supabase).from('compras_materia_prima').delete().eq('materia_prima_id', id)
-      // 3. Ahora si se puede borrar la MP
       const { error: err } = await db(supabase)
         .from('materias_primas').delete().eq('id', id)
       if (err) throw new Error(`eliminar MP: ${err.message}`)
       setMaterias(prev => prev.filter(m => m.id !== id))
-      // Refrescar productos por si sus costos quedaron desactualizados
       await fetchProductos()
     } finally { setSaving(false) }
   }, [supabase, fetchProductos])
 
-  // ── Registrar compra de materia prima ──────────────────────────────────────
   const registrarCompraMP = useCallback(async (data: CompraMateriaPrimaData): Promise<void> => {
     setSaving(true)
     try {
@@ -417,7 +420,6 @@ export function useStock() {
       const nuevoCostoUnitario = data.costo_total / data.cantidad
       const stockNuevo = toFloat(mp.stock_actual) + data.cantidad
 
-      // 1. Insertar compra
       const compraInsert: CompraMpInsertLocal = {
         negocio_id:       negocioId,
         materia_prima_id: data.materia_prima_id,
@@ -430,7 +432,6 @@ export function useStock() {
         .from('compras_materia_prima').insert(compraInsert)
       if (errC) throw new Error(`compra MP: ${errC.message}`)
 
-      // 2. Actualizar stock y costo de la MP
       const mpUpdate: MateriaPrimaUpdateLocal = {
         stock_actual:     stockNuevo.toString(),
         costo_por_unidad: nuevoCostoUnitario.toFixed(2),
@@ -439,27 +440,23 @@ export function useStock() {
         .from('materias_primas').update(mpUpdate).eq('id', data.materia_prima_id)
       if (errMP) throw new Error(`actualizar MP: ${errMP.message}`)
 
-      // 3. Recalcular costo de productos que usan esta MP
       const { data: recetas } = await db(supabase)
         .from('recetas').select('producto_id').eq('materia_prima_id', data.materia_prima_id)
       for (const r of (recetas as { producto_id: string }[]) ?? []) {
         await db(supabase).rpc('recalcular_costo_producto', { p_producto_id: r.producto_id })
       }
 
-      // Actualizar estado local
       setMaterias(prev => prev.map(m =>
         m.id === data.materia_prima_id
           ? { ...m, stock_actual: stockNuevo.toString(), costo_por_unidad: nuevoCostoUnitario.toFixed(2) }
           : m
       ))
-      // Refrescar productos por si cambiaron costos
       await fetchProductos()
     } finally {
       setSaving(false)
     }
   }, [supabase, materias, fetchProductos])
 
-  // ── KPIs calculados ────────────────────────────────────────────────────────
   const resumen = {
     totalProductos:     productos.length,
     productosCriticos:  productos.filter(p => p.stock_actual <= p.stock_minimo).length,
