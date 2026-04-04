@@ -75,41 +75,45 @@ function diasLabel(d: number): string {
   return `en ${d} días`
 }
 function diasColor(d: number): { color: string; bg: string; border: string } {
-  if (d < 0)  return { color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' }
-  if (d === 0) return { color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' }
-  if (d <= 3)  return { color: '#d97706', bg: '#fffbeb', border: '#fde68a' }
+  // Rojo: Si es hoy (0) o ya pasó (< 0)
+  if (d <= 0) return { color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' }
+  
+  // Amarillo: Si falta exactamente 1 día (el aviso previo)
+  if (d === 1) return { color: '#d97706', bg: '#fffbeb', border: '#fde68a' }
+  
+  // Verde: Si faltan 2 días o más
   return { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' }
 }
 
 // ── BANNER DE ALERTAS ─────────────────────────────────────────────────────────
 function BannerAlertas({ alertas, t }: { alertas: ReturnType<typeof usePedidos>['alertas']; t: Tema }) {
   if (alertas.hoy.length === 0 && alertas.manana.length === 0 && alertas.atrasados.length === 0) return null
+  
   return (
     <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {alertas.atrasados.length > 0 && (
+      {/* 🚨 ATRASADOS Y HOY: Ambos en Rojo */}
+      {(alertas.atrasados.length > 0 || alertas.hoy.length > 0) && (
         <div style={{ padding: '10px 14px', borderRadius: 11, background: '#fff1f2', border: '1px solid #fecdd3', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>🚨</span>
           <div style={{ flex: 1 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>{alertas.atrasados.length} pedido{alertas.atrasados.length > 1 ? 's' : ''} atrasado{alertas.atrasados.length > 1 ? 's' : ''}</span>
-            <span style={{ fontSize: 11, color: '#9f1239', marginLeft: 6 }}>{alertas.atrasados.map(p => p.clientes?.nombre ?? 'Cliente').join(', ')}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>
+              {alertas.atrasados.length + alertas.hoy.length} entrega(s) urgentes para hoy o atrasadas
+            </span>
           </div>
         </div>
       )}
-      {alertas.hoy.length > 0 && (
-        <div style={{ padding: '10px 14px', borderRadius: 11, background: '#fffbeb', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16 }}>📅</span>
-          <div style={{ flex: 1 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#d97706' }}>{alertas.hoy.length} entrega{alertas.hoy.length > 1 ? 's' : ''} para hoy</span>
-            <span style={{ fontSize: 11, color: '#92400e', marginLeft: 6 }}>{alertas.hoy.map(p => p.clientes?.nombre ?? 'Cliente').join(', ')}</span>
-          </div>
-        </div>
-      )}
+
+      {/* ⏰ MAÑANA: Ahora en Amarillo (Aviso previo) */}
       {alertas.manana.length > 0 && (
-        <div style={{ padding: '10px 14px', borderRadius: 11, background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ padding: '10px 14px', borderRadius: 11, background: '#fffbeb', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>⏰</span>
           <div style={{ flex: 1 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>{alertas.manana.length} entrega{alertas.manana.length > 1 ? 's' : ''} para mañana</span>
-            <span style={{ fontSize: 11, color: '#1e40af', marginLeft: 6 }}>{alertas.manana.map(p => p.clientes?.nombre ?? 'Cliente').join(', ')}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#d97706' }}>
+              {alertas.manana.length} entrega{alertas.manana.length > 1 ? 's' : ''} para mañana
+            </span>
+            <span style={{ fontSize: 11, color: '#92400e', marginLeft: 6 }}>
+              {alertas.manana.map(p => p.clientes?.nombre ?? 'Cliente').join(', ')}
+            </span>
           </div>
         </div>
       )}
