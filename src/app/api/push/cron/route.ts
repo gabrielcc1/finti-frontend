@@ -13,14 +13,23 @@ interface CuotaRow    { usuario_id: string; total_cuotas: number; monto_total: n
 interface VencidaRow  { usuario_id: string; total_vencidas: number; monto_vencido: number }
 interface PedidoRow   { usuario_id: string; total_pedidos: number }
 
-export async function POST(req: NextRequest) {
-  // Validar secret en producción
-  if (process.env.NODE_ENV === 'production') {
-    const secret = req.headers.get('x-cron-secret')
+export async function GET(req: NextRequest) {
+ if (process.env.NODE_ENV === 'production') {
+    // Probamos ambos: header de cron estándar y tu x-cron-secret
+    const secret = req.headers.get('x-cron-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
+    
     if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+      return NextResponse.json({ 
+        error: 'No autorizado', 
+        debug: { 
+          enviado: secret ? "Sí" : "No", 
+          configurado: process.env.CRON_SECRET ? "Sí" : "No" 
+        } 
+      }, { status: 401 });
     }
   }
+
+  const res = { cuotasHoy: 0, cuotasVencidas: 0, pedidosHoy: 0 };
 
   // Service role para bypassar RLS
   const supabase = createClient(
@@ -28,8 +37,6 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   )
-
-  const res = { cuotasHoy: 0, cuotasVencidas: 0, pedidosHoy: 0 }
 
   // ── Helper: obtener subs del usuario y verificar que tiene push activo ─────
   async function getSubs(userId: string): Promise<SubRow[] | null> {
@@ -106,9 +113,11 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) { console.error('[cron] pedidosHoy:', err) }
 
-  return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...res })
+  return NextResponse.json({
+    ok: true,
+    service: "finti-push-cron",
+    resultados: res
+  });
 }
 
-export async function GET() {
-  return NextResponse.json({ ok: true, service: 'finti-push-cron', status: 'activo' })
-}
+export const POST = GET;
