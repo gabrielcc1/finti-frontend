@@ -28,13 +28,15 @@ const formatPeso = (n: string | number | null | undefined) => {
   return `$${parts[0]},${parts[1]}`
 }
 
-function getSemaforoCuota(cuota: Cuota): 'pagada' | 'vencida' | 'hoy' | 'pendiente' {
+function getSemaforoCuota(cuota: Cuota): 'pagada' | 'vencida' | 'hoy' | 'manana' | 'pendiente' {
   if (cuota.estado === 'pagada') return 'pagada'
   const partes = (cuota.fecha_vencimiento ?? '').slice(0, 10).split('-').map(Number)
   const venc = new Date(partes[0], partes[1] - 1, partes[2])
   const ahora = new Date(); ahora.setHours(0, 0, 0, 0)
   if (venc.getTime() === ahora.getTime()) return 'hoy'
   if (venc < ahora) return 'vencida'
+  const manana = new Date(ahora); manana.setDate(ahora.getDate() + 1)
+  if (venc.getTime() === manana.getTime()) return 'manana'
   return 'pendiente'
 }
 
@@ -209,10 +211,11 @@ function PanelCuotas({ cobranza, t, dark, onCobrar, onEditarFecha }: {
   const cuotas = [...(cobranza.cuotas ?? [])].sort((a,b) => a.numero_cuota - b.numero_cuota)
   const cliente = cobranza.clientes?.nombre ?? 'Cliente'
   const colores = {
-    pagada:   { bg:t.green,      border:t.greenBorder, text:t.greenText, label:'✓ Pagada'  },
-    vencida:  { bg:t.red,        border:t.redBorder,   text:t.redNum,    label:'Vencida'   },
-    hoy:      { bg:t.amber,      border:t.amberBorder, text:t.amberSub,  label:'Vence hoy' },
-    pendiente:{ bg:t.surfaceAlt, border:t.border,      text:t.textMuted, label:'Pendiente' },
+    pagada:   { bg:t.green,      border:t.greenBorder, text:t.greenText, label:'✓ Pagada'      },
+    vencida:  { bg:t.red,        border:t.redBorder,   text:t.redNum,    label:'Vencida'       },
+    hoy:      { bg:t.amber,      border:t.amberBorder, text:t.amberSub,  label:'Vence hoy'     },
+    manana:   { bg:t.amber,      border:t.amberBorder, text:t.amberSub,  label:'Vence mañana'  },
+    pendiente:{ bg:t.surfaceAlt, border:t.border,      text:t.textMuted, label:'Pendiente'     },
   }
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:10, paddingTop:10, borderTop:`1px dashed ${t.border}` }}>
@@ -258,6 +261,8 @@ function CardCobranza({ cobranza, t, dark, onCobrar, onMarcarProblematico, onEdi
   const cuotas   = cobranza.cuotas ?? []
   const pagas    = cuotas.filter(c => c.estado === 'pagada').length
   const vencidas = cuotas.filter(c => getSemaforoCuota(c) === 'vencida').length
+  const manana   = cuotas.filter(c => getSemaforoCuota(c) === 'manana').length
+  const hoyCount = cuotas.filter(c => getSemaforoCuota(c) === 'hoy').length
   const totalMonto = toFloat(cobranza.monto_total)
   const progreso   = cobranza.cant_cuotas > 0 ? (pagas / cobranza.cant_cuotas) * 100 : 0
   const cliente        = cobranza.clientes
@@ -265,7 +270,7 @@ function CardCobranza({ cobranza, t, dark, onCobrar, onMarcarProblematico, onEdi
   const tieneHistorial = !esMoroso && cliente?.motivo_moroso?.startsWith('[NORMALIZADO]')
 
   return (
-    <div style={{ background:t.surface, border:`1px solid ${vencidas>0 ? t.redBorder : t.border}`, borderRadius:15, padding:'14px 16px', boxShadow:t.shadow }}>
+    <div style={{ background:t.surface, border:`1px solid ${vencidas>0 ? t.redBorder : (hoyCount>0||manana>0) ? t.amberBorder : t.border}`, borderRadius:15, padding:'14px 16px', boxShadow:t.shadow }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
         <div style={{ position:'relative', flexShrink:0 }}>
@@ -281,6 +286,8 @@ function CardCobranza({ cobranza, t, dark, onCobrar, onMarcarProblematico, onEdi
             {esMoroso && <Badge label="Problemático" color={t.redNum} bg={t.red} />}
             {tieneHistorial && <Badge label="Antecedentes" color={t.amberSub} bg={t.amber} />}
             {vencidas > 0 && !esMoroso && <Badge label={`${vencidas} vencida${vencidas>1?'s':''}`} color={t.redNum} bg={t.red} />}
+            {hoyCount > 0 && vencidas === 0 && !esMoroso && <Badge label="Vence hoy" color={t.amberSub} bg={t.amber} />}
+            {manana > 0 && vencidas === 0 && hoyCount === 0 && !esMoroso && <Badge label="Vence mañana" color={t.amberSub} bg={t.amber} />}
           </div>
           <div style={{ fontSize:11, color:t.textMuted, marginTop:2 }}>
             {cobranza.descripcion ?? 'Cobranza'} · {pagas}/{cobranza.cant_cuotas} cuotas
@@ -469,9 +476,17 @@ export function CobranzasView({ usuario, cobranzas }: CobranzasViewProps) {
   const cobranzasMorosos = cobranzas.cobranzas.filter(c => c.clientes?.es_moroso)
 
   const [hoy] = useState(() => new Date().toISOString().slice(0, 10))
+  const [mananaStr] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1)
+    return d.toISOString().slice(0, 10)
+  })
   const cobranzasConCuotasHoy = cobranzasActivas.filter(c =>
     (c.cuotas ?? []).some(q => q.fecha_vencimiento?.slice(0, 10) === hoy && q.estado === 'pendiente')
   )
+  // Cuotas que vencen mañana — para el aviso en el topbar
+  const cuotasManana = cobranzasActivas.reduce((acc, c) =>
+    acc + (c.cuotas ?? []).filter(q => q.fecha_vencimiento?.slice(0, 10) === mananaStr && q.estado === 'pendiente').length
+  , 0)
   const [recorrido,    setRecorrido]    = useState<CobranzaConDetalle[]>([])
   const [dragIdx,      setDragIdx]      = useState<number | null>(null)
   const [dragOverIdx,  setDragOverIdx]  = useState<number | null>(null)
@@ -541,7 +556,11 @@ export function CobranzasView({ usuario, cobranzas }: CobranzasViewProps) {
         {isMobile && <button onClick={()=>router.push('/dashboard')} style={{ marginRight:12, background:'none', border:'none', color:t.textMuted, cursor:'pointer', fontSize:18 }}>←</button>}
         <div>
           <div style={{ fontSize:13, fontWeight:700, color:t.text }}>Cobranzas</div>
-          <div style={{ fontSize:10, color:t.textMuted }}>{cobranzas.resumen.cuotasHoy} vencen hoy · {cobranzas.resumen.cantMorosos} morosos</div>
+          <div style={{ fontSize:10, color:t.textMuted }}>
+            {cobranzas.resumen.cuotasHoy} vencen hoy
+            {cuotasManana > 0 && <span style={{ color:t.amberSub }}> · {cuotasManana} vencen mañana</span>}
+            {' · '}{cobranzas.resumen.cantMorosos} morosos
+          </div>
         </div>
         <button onClick={()=>setShowNueva(true)} style={{ marginLeft:'auto', padding:'8px 14px', borderRadius:10, border:'none', background:t.accent, color:t.accentText, fontSize:12, fontWeight:800, cursor:'pointer' }}>＋ Nueva</button>
       </div>
