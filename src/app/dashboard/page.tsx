@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useDashboard } from '@/hooks/useDashboard'
 import { usePedidos } from '@/hooks/usePedidos'
 import { DashboardView } from '@/components/dashboard/DashboardView'
+import { ConsentimientoGuard } from '@/components/onboarding/ConsentimientoGuard'
 
 export default function DashboardPage() {
   const router  = useRouter()
@@ -21,6 +22,7 @@ export default function DashboardPage() {
   if (authLoading) return <FintiLoader />
 
   return (
+     <ConsentimientoGuard>
     <DashboardView
       usuario={{
         nombre:  perfil?.nombre ?? 'Usuario',
@@ -31,6 +33,7 @@ export default function DashboardPage() {
       dashboard={dashboard}
       pedidos={pedidos}
     />
+    </ConsentimientoGuard>
   )
 }
 

@@ -283,9 +283,7 @@ export function NotificacionesSection({ t }: { t: Tema }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {([
                 ['⏰', 'Cuotas que vencen hoy',  'Cada mañana si hay cobros del día'],
-                ['🚨', 'Cuotas vencidas',         'Seguimiento diario de morosos'],
                 ['📦', 'Pedidos del día',          'Recordatorio de entregas programadas'],
-                ['✅', 'Pago confirmado',           'Al registrar un cobro desde la app'],
               ] as const).map(([emoji, titulo, desc]) => (
                 <div key={titulo} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{emoji}</span>
