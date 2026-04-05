@@ -20,14 +20,16 @@ interface DashboardViewProps {
 const toFloat = (v: string | number | null | undefined) => parseFloat(String(v ?? 0)) || 0
 const formatPeso = (n: string | number | null | undefined) => `$${toFloat(n).toLocaleString('es-AR')}`
 
-type SemaforoEstado = 'pagada' | 'vencida' | 'hoy' | 'pendiente'
+type SemaforoEstado = 'pagada' | 'vencida' | 'hoy' | 'manana' | 'pendiente'
 function getSemaforo(cuota: { estado: string; fecha_vencimiento: string }): SemaforoEstado {
   if (cuota.estado === 'pagada') return 'pagada'
   const hoy = new Date(); hoy.setHours(0,0,0,0)
-  const venc = new Date(cuota.fecha_vencimiento)
+  const partes = (cuota.fecha_vencimiento ?? '').slice(0,10).split('-').map(Number)
+  const venc = new Date(partes[0], partes[1] - 1, partes[2])
   if (venc < hoy) return 'vencida'
-  const manana = new Date(hoy); manana.setDate(hoy.getDate()+1)
-  if (venc <= manana) return 'hoy'
+  if (venc.getTime() === hoy.getTime()) return 'hoy'
+  const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1)
+  if (venc.getTime() === manana.getTime()) return 'manana'
   return 'pendiente'
 }
 function getSemaforoPedido(d: number): 'urgente'|'proximo'|'ok' {
@@ -107,6 +109,7 @@ function CuotaRow({ cuota, onCheck, t, dark, compact=false }: {
     pagada:{bg:t.green,border:t.greenBorder,text:t.greenText,label:'✓ cobrado'},
     vencida:{bg:t.red,border:t.redBorder,text:t.redNum,label:'vencida'},
     hoy:{bg:t.amber,border:t.amberBorder,text:t.amberSub,label:'hoy'},
+    manana:{bg:t.amber,border:t.amberBorder,text:t.amberSub,label:'mañana'},
     pendiente:{bg:t.surfaceAlt,border:t.borderLight,text:t.textMuted,label:'pendiente'},
   }
   const col = colores[sem]
