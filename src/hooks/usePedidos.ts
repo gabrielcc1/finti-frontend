@@ -58,6 +58,7 @@ interface CuotaInsertLocal {
   fecha_vencimiento: string
   estado:            'pendiente' | 'pagada' | 'vencida'
   intentos_cobro:    number
+  fecha_pago?:       string
 }
 
 export type EstadoPedido = 'recibido' | 'en_elaboracion' | 'listo' | 'entregado' | 'cancelado'
@@ -84,7 +85,8 @@ export interface DatosVentaEntrega {
   descripcion:  string
   monto_total:  number
   tipo_pago:    'efectivo' | 'transferencia' | 'tarjeta' | 'cuotas'
-  cant_cuotas?: number
+  cant_cuotas?:           number
+  cobrar_primer_cuota?:  boolean  // si true, marca la 1ra cuota como pagada al entregar
 }
 
 async function getNegocioId(supabase: ReturnType<typeof createClient>): Promise<string> {
@@ -107,7 +109,15 @@ export function usePedidos() {
   const toFloat = (v: string | number | null | undefined) => parseFloat(String(v ?? 0)) || 0
 
   const fetchPedidos = useCallback(async (): Promise<void> => {
-    const hoy = new Date().toISOString().slice(0, 10)
+    // Fecha local del dispositivo — NO usar toISOString() que devuelve UTC
+    // A las 21hs en Argentina (UTC-3) toISOString() ya da el día siguiente
+    const parseLocal = (iso: string) => {
+      const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+      return new Date(y, m - 1, d)
+    }
+    const ahora = new Date()
+    const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}-${String(ahora.getDate()).padStart(2,'0')}`
+
     const { data, error: err } = await db(supabase)
       .from('pedidos')
       .select('*, clientes(nombre, telefono, zona_comercial)')
@@ -116,11 +126,11 @@ export function usePedidos() {
 
     if (err) throw new Error(`pedidos: ${err.message}`)
 
-    const hoyDate = new Date(hoy)
+    const hoyDate = parseLocal(hoy)
     const raw = (data ?? []) as (Pedido & { clientes: PedidoConCliente['clientes'] })[]
     const conDias: PedidoConCliente[] = raw.map(p => {
-      const entrega = new Date(p.fecha_entrega)
-      const diff = Math.ceil((entrega.getTime() - hoyDate.getTime()) / (1000 * 60 * 60 * 24))
+      const entrega = parseLocal(p.fecha_entrega)
+      const diff = Math.round((entrega.getTime() - hoyDate.getTime()) / (1000 * 60 * 60 * 24))
       return { ...p, dias_restantes: diff }
     })
     setPedidos(conDias)
@@ -161,7 +171,7 @@ export function usePedidos() {
         cant_cuotas:     data.cant_cuotas ?? 1,
         notas:           data.notas?.trim() ?? null,
         estado:          'recibido',
-        fecha_pedido:    new Date().toISOString().slice(0, 10),
+        fecha_pedido:    (() => { const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })(),
       }
       const { error: err } = await db(supabase).from('pedidos').insert(insert)
       if (err) throw new Error(`crearPedido: ${err.message}`)
@@ -195,7 +205,9 @@ export function usePedidos() {
     setSaving(true)
     try {
       const negocioId = await getNegocioId(supabase)
-      const hoy = new Date().toISOString().slice(0, 10)
+      // Fecha local — toISOString() devuelve UTC y en Argentina a las 21hs ya es mañana
+      const _ahora = new Date()
+      const hoy = `${_ahora.getFullYear()}-${String(_ahora.getMonth()+1).padStart(2,'0')}-${String(_ahora.getDate()).padStart(2,'0')}`
 
       // 1. Insertar venta
       const ventaInsert: VentaInsertLocal = {
@@ -236,17 +248,40 @@ export function usePedidos() {
 
         const montoCuota = datos.monto_total / cant
         const cuotas: CuotaInsertLocal[] = Array.from({ length: cant }, (_, i) => {
-          const f = new Date(hoy); f.setMonth(f.getMonth() + i + 1)
+          // Si cobrar_primer_cuota=true:
+          //   - Cuota 1: fecha_vencimiento = hoy (se cobró hoy), estado = pagada
+          //   - Cuotas 2..N: arrancan desde el mes siguiente (i-1 para compensar)
+          // Si NO cobrar_primer_cuota: todas arrancan desde hoy + (i+1) meses (comportamiento original)
+          const esPrimera = i === 0 && datos.cobrar_primer_cuota === true
+          const f = new Date(hoy)
+          if (esPrimera) {
+            // fecha_vencimiento = hoy porque se cobró en el momento de la entrega
+          } else if (datos.cobrar_primer_cuota) {
+            // Las cuotas 2..N arrancan desde el mes siguiente (i meses desde hoy, no i+1)
+            f.setMonth(f.getMonth() + i)
+          } else {
+            // Comportamiento original: todas empiezan desde hoy + (i+1) meses
+            f.setMonth(f.getMonth() + i + 1)
+          }
           return {
             cobranza_id:       cobranzaId as string,
             numero_cuota:      i + 1,
             monto:             montoCuota.toFixed(2),
             fecha_vencimiento: f.toISOString().slice(0, 10),
-            estado:            'pendiente' as const,
+            estado:            esPrimera ? ('pagada' as const) : ('pendiente' as const),
             intentos_cobro:    0,
+            ...(esPrimera ? { fecha_pago: hoy } : {}),
           }
         })
         await db(supabase).from('cuotas').insert(cuotas)
+
+        // Si se cobró la 1ra cuota, reflejar cuotas_pagas = 1 en la cobranza
+        if (datos.cobrar_primer_cuota) {
+          await db(supabase)
+            .from('cobranzas')
+            .update({ cuotas_pagas: 1 })
+            .eq('id', cobranzaId)
+        }
       }
 
       // 3. Marcar pedido como entregado y vincular venta
@@ -264,7 +299,8 @@ export function usePedidos() {
   const confirmarEntregaSinVenta = useCallback(async (id: string): Promise<void> => {
     setSaving(true)
     try {
-      const hoy = new Date().toISOString().slice(0, 10)
+      const _a = new Date()
+      const hoy = `${_a.getFullYear()}-${String(_a.getMonth()+1).padStart(2,'0')}-${String(_a.getDate()).padStart(2,'0')}`
       const update: PedidoUpdateLocal = { estado: 'entregado', fecha_entrega_real: hoy }
       const { error: err } = await db(supabase).from('pedidos').update(update).eq('id', id)
       if (err) throw new Error(`confirmarEntrega: ${err.message}`)
