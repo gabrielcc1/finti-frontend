@@ -1,7 +1,7 @@
 'use client'
 
 // src/components/pedidos/PedidosView.tsx
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDarkMode } from '@/hooks/useDarkMode'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/shared/Sidebar'
@@ -240,17 +240,21 @@ function ModalConfirmarEntrega({ pedido, t, dark, pedidosHook, onClose }: {
   pedido: PedidoConCliente; t: Tema; dark: boolean
   pedidosHook: ReturnType<typeof usePedidos>; onClose: () => void
 }) {
-  const [tipoPago,   setTipoPago]   = useState<DatosVentaEntrega['tipo_pago']>('efectivo')
-  const [cantCuotas, setCantCuotas] = useState(pedido.cant_cuotas ?? 1)
-  const [exito,      setExito]      = useState(false)
+  const [tipoPago,         setTipoPago]         = useState<DatosVentaEntrega['tipo_pago']>('efectivo')
+  const [cantCuotas,       setCantCuotas]       = useState(pedido.cant_cuotas ?? 1)
+  const [cobrarPrimeraCuota, setCobrarPrimeraCuota] = useState(false)
+  const [exito,            setExito]            = useState(false)
   const monto = toFloat(pedido.monto_entrega) - toFloat(pedido.monto_seña)
 
   const handleConVenta = async () => {
     await pedidosHook.confirmarEntregaConVenta({
-      pedido_id: pedido.id, cliente_id: pedido.cliente_id,
-      descripcion: pedido.descripcion,
-      monto_total: toFloat(pedido.monto_entrega) - toFloat(pedido.monto_seña),
-      tipo_pago: tipoPago, cant_cuotas: cantCuotas,
+      pedido_id:          pedido.id,
+      cliente_id:         pedido.cliente_id,
+      descripcion:        pedido.descripcion,
+      monto_total:        toFloat(pedido.monto_entrega) - toFloat(pedido.monto_seña),
+      tipo_pago:          tipoPago,
+      cant_cuotas:        cantCuotas,
+      cobrar_primer_cuota: tipoPago === 'cuotas' ? cobrarPrimeraCuota : false,
     })
     setExito(true)
     setTimeout(onClose, 1400)
@@ -289,11 +293,29 @@ function ModalConfirmarEntrega({ pedido, t, dark, pedidosHook, onClose }: {
             ))}
           </div>
           {tipoPago === 'cuotas' && (
-            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 12, color: t.textMuted }}>Cuotas:</span>
-              <input type="number" min="2" max="60" value={cantCuotas} onChange={e => setCantCuotas(Math.max(2, parseInt(e.target.value) || 2))}
-                style={{ width: 70, padding: '6px 8px', borderRadius: 8, border: `1.5px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, outline: 'none' }} />
-              <span style={{ fontSize: 11, color: t.textMuted }}>→ {formatPeso(monto / cantCuotas)} c/u</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 12, color: t.textMuted }}>Cuotas:</span>
+                <input type="number" min="2" max="60" value={cantCuotas} onChange={e => setCantCuotas(Math.max(2, parseInt(e.target.value) || 2))}
+                  style={{ width: 70, padding: '6px 8px', borderRadius: 8, border: `1.5px solid ${t.border}`, background: t.bg, color: t.text, fontSize: 13, outline: 'none' }} />
+                <span style={{ fontSize: 11, color: t.textMuted }}>→ {formatPeso(monto / cantCuotas)} c/u</span>
+              </div>
+              {/* Toggle: cobrar la 1ra cuota en el momento de la entrega */}
+              <div
+                onClick={() => setCobrarPrimeraCuota(!cobrarPrimeraCuota)}
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 14px', borderRadius: 11, border: `1.5px solid ${cobrarPrimeraCuota ? t.greenBorder : t.border}`, background: cobrarPrimeraCuota ? t.green : t.surfaceAlt, cursor: 'pointer', transition: 'all 0.2s' }}>
+                <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${cobrarPrimeraCuota ? t.greenText : t.border}`, background: cobrarPrimeraCuota ? t.greenText : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.2s' }}>
+                  {cobrarPrimeraCuota && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: cobrarPrimeraCuota ? t.greenText : t.text }}>
+                    Cobrar 1ra cuota ahora ({formatPeso(monto / cantCuotas)})
+                  </div>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>
+                    La marcás como pagada hoy. Las {cantCuotas - 1} restantes quedan en Cobranzas.
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -694,9 +716,18 @@ function ListaPedidos({ pedidos: hook, t, dark, onEntregar }: {
 // ══════════════════════════════════════════════════════════════════════════════
 export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
   const [dark, setDark] = useDarkMode()
-  const [isMobile,        setIsMobile]        = useState(false)
-  const [showNuevo,       setShowNuevo]       = useState(false)
-  const [pedidoEntregar,  setPedidoEntregar]  = useState<PedidoConCliente | null>(null)
+  const [isMobile,       setIsMobile]       = useState(false)
+  const [showNuevo,      setShowNuevo]      = useState(false)
+  const [pedidoEntregar, setPedidoEntregar] = useState<PedidoConCliente | null>(null)
+  const [tab,            setTab]            = useState<'lista'|'recorrido'>('lista')
+  // Recorrido del día — pedidos con entrega hoy ordenables
+  const [recorrido,   setRecorrido]   = useState<PedidoConCliente[]>([])
+  const [dragIdx,     setDragIdx]     = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const [entregadosHoy, setEntregadosHoy] = useState<Set<string>>(new Set())
+  const listRef       = useRef<HTMLDivElement>(null)
+  const touchFromIdx  = useRef<number | null>(null)
+  const touchToIdx    = useRef<number | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -706,6 +737,65 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
   }, [])
 
   const t = dark ? tema.dark : tema.light
+
+  // ── Recorrido: pedidos con entrega hoy ──────────────────────────────────────
+  // Usamos fecha local formateada manualmente para evitar desfase UTC
+  const hoyLocal = (() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`
+  })()
+  const pedidosHoy = pedidos.pedidos.filter(p =>
+    p.fecha_entrega?.slice(0, 10) === hoyLocal &&
+    p.estado !== 'entregado' && p.estado !== 'cancelado'
+  )
+
+  // Sincronizar recorrido cuando carguen los pedidos
+  useEffect(() => {
+    if (pedidos.loading) return
+    setRecorrido(prev => {
+      const prevIds = new Set(prev.map(p => p.id))
+      const nuevos  = pedidosHoy.filter(p => !prevIds.has(p.id))
+      const actualizados = prev
+        .filter(p => pedidosHoy.some(x => x.id === p.id))
+        .map(p => pedidosHoy.find(x => x.id === p.id) ?? p)
+      return [...actualizados, ...nuevos]
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidos.loading, pedidos.pedidos.length])
+
+  // Drag & Drop handlers (igual que cobranzas)
+  const handleDragStart = (idx: number) => setDragIdx(idx)
+  const handleDragOver  = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIdx(idx) }
+  const handleDrop      = (toIdx: number) => {
+    if (dragIdx === null || dragIdx === toIdx) { setDragIdx(null); setDragOverIdx(null); return }
+    setRecorrido(prev => { const arr=[...prev]; const [m]=arr.splice(dragIdx,1); arr.splice(toIdx,0,m); return arr })
+    setDragIdx(null); setDragOverIdx(null)
+  }
+  const handleDragEnd = () => { setDragIdx(null); setDragOverIdx(null) }
+
+  const handleTouchStart = (e: React.TouchEvent, idx: number) => {
+    e.stopPropagation(); touchFromIdx.current=idx; touchToIdx.current=idx; setDragIdx(idx)
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchFromIdx.current===null||!listRef.current) return
+    e.preventDefault()
+    const touch=e.touches[0]
+    const children=Array.from(listRef.current.children) as HTMLElement[]
+    for (let i=0;i<children.length;i++) {
+      const rect=children[i].getBoundingClientRect()
+      if (touch.clientY>=rect.top&&touch.clientY<=rect.bottom) {
+        if (touchToIdx.current!==i){touchToIdx.current=i;setDragOverIdx(i)}; break
+      }
+    }
+  }
+  const handleTouchEnd = () => {
+    const from=touchFromIdx.current; const to=touchToIdx.current
+    if (from!==null&&to!==null&&from!==to) {
+      setRecorrido(prev=>{const arr=[...prev];const [m]=arr.splice(from,1);arr.splice(to,0,m);return arr})
+    }
+    touchFromIdx.current=null; touchToIdx.current=null; setDragIdx(null); setDragOverIdx(null)
+  }
+
   const totalActivos    = pedidos.pedidos.length
   const montoSemana     = pedidos.alertas.estaSemana.reduce((s, p) => s + toFloat(p.monto_entrega) - toFloat(p.monto_seña), 0)
   const listos          = pedidos.pedidos.filter(p => p.estado === 'listo').length
@@ -722,11 +812,17 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
 
   const content = (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* Topbar */}
       <div style={{ height: 54, background: t.surface, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0 }}>
         {isMobile && <button onClick={() => router.push('/dashboard')} style={{ marginRight: 12, background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: 18 }}>←</button>}
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Pedidos</div>
-          <div style={{ fontSize: 10, color: t.textMuted }}>{totalActivos} activos · {pedidos.alertas.hoy.length + pedidos.alertas.atrasados.length > 0 ? `⚠️ ${pedidos.alertas.hoy.length + pedidos.alertas.atrasados.length} urgentes` : 'Todo al día ✓'}</div>
+          <div style={{ fontSize: 10, color: t.textMuted }}>
+            {totalActivos} activos
+            {pedidosHoy.length > 0 && <span style={{ color: t.amberSub }}> · {pedidosHoy.length} para entregar hoy</span>}
+            {pedidos.alertas.atrasados.length > 0 && <span style={{ color: t.redNum }}> · {pedidos.alertas.atrasados.length} atrasados</span>}
+          </div>
         </div>
         <button onClick={() => setShowNuevo(true)}
           style={{ marginLeft: 'auto', padding: '8px 16px', borderRadius: 10, border: 'none', background: t.accent, color: t.accentText, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
@@ -735,6 +831,8 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: isMobile ? 80 : 20 }}>
+
+        {/* KPIs */}
         <div style={{ padding: '16px 20px 0', display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 10 }}>
           {kpis.map((k, i) => (
             <div key={i} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 13, padding: '12px 14px', boxShadow: t.shadow }}>
@@ -746,14 +844,175 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
             </div>
           ))}
         </div>
+
+        {/* Banner alertas */}
         <div style={{ padding: '12px 0 0' }}><BannerAlertas alertas={pedidos.alertas} t={t} /></div>
-        <div style={{ padding: '12px 0 0' }}><ResumenSemanal pedidos={pedidos.pedidos} t={t} /></div>
-        <div style={{ padding: '16px 20px 0' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pedidos activos</div>
-          <ListaPedidos pedidos={pedidos} t={t} dark={dark} onEntregar={setPedidoEntregar} />
+
+        {/* Tabs */}
+        <div style={{ padding: '14px 20px 0', display: 'flex', gap: 6 }}>
+          <button onClick={() => setTab('lista')}
+            style={{ padding: '7px 16px', borderRadius: 20, border: `1.5px solid ${tab==='lista'?t.accent:t.border}`, background: tab==='lista'?(dark?'#2a2218':t.surfaceAlt):'transparent', color: tab==='lista'?t.accent:t.textMuted, fontSize: 12, fontWeight: tab==='lista'?700:400, cursor: 'pointer' }}>
+            Pedidos activos
+          </button>
+          <button onClick={() => setTab('recorrido')}
+            style={{ padding: '7px 16px', borderRadius: 20, border: `1.5px solid ${tab==='recorrido'?t.accent:t.border}`, background: tab==='recorrido'?(dark?'#2a2218':t.surfaceAlt):'transparent', color: tab==='recorrido'?t.accent:t.textMuted, fontSize: 12, fontWeight: tab==='recorrido'?700:400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🗺</span>
+            Recorrido del día
+            {pedidosHoy.length > 0 && (
+              <span style={{ background: t.amberSub, color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 700 }}>
+                {pedidosHoy.length}
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* Tab: Lista de pedidos */}
+        {tab === 'lista' && (
+          <div>
+            <div style={{ padding: '12px 0 0' }}><ResumenSemanal pedidos={pedidos.pedidos} t={t} /></div>
+            <div style={{ padding: '16px 20px 0' }}>
+              <ListaPedidos pedidos={pedidos} t={t} dark={dark} onEntregar={setPedidoEntregar} />
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Recorrido del día */}
+        {tab === 'recorrido' && (
+          <div ref={listRef} style={{ padding: '14px 20px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            {/* Header recorrido */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
+                  Entregas de hoy — {recorrido.length} parada{recorrido.length !== 1 ? 's' : ''}
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Arrastrá ≡ para ordenar tu recorrido</div>
+              </div>
+              {recorrido.length > 0 && (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 800, color: t.accent }}>
+                    {formatPeso(recorrido.filter(p => entregadosHoy.has(p.id)).reduce((s, p) => s + toFloat(p.monto_entrega) - toFloat(p.monto_seña), 0))}
+                    {' '}<span style={{ fontWeight: 400, color: t.textFaint }}>
+                      / {formatPeso(recorrido.reduce((s, p) => s + toFloat(p.monto_entrega) - toFloat(p.monto_seña), 0))}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 9, color: t.textFaint, marginTop: 1 }}>cobrado / total</div>
+                </div>
+              )}
+            </div>
+
+            {/* Empty state */}
+            {recorrido.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: t.textFaint }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>🗺</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: t.textMuted }}>Sin entregas para hoy</div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>
+                  Los pedidos con fecha de entrega hoy aparecen acá automáticamente
+                </div>
+              </div>
+            )}
+
+            {/* Cards del recorrido */}
+            {recorrido.map((p, idx) => {
+              const entregado  = entregadosHoy.has(p.id)
+              const isDragging = dragIdx === idx
+              const isDragOver = dragOverIdx === idx && dragIdx !== idx
+              const monto      = toFloat(p.monto_entrega) - toFloat(p.monto_seña)
+              return (
+                <div key={p.id}
+                  draggable={!entregado}
+                  onDragStart={() => !entregado && handleDragStart(idx)}
+                  onDragOver={e => handleDragOver(e, idx)}
+                  onDrop={() => handleDrop(idx)}
+                  onDragEnd={handleDragEnd}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 14px', borderRadius: 14,
+                    background: entregado ? t.green : isDragOver ? t.surfaceAlt : t.surface,
+                    border: `1.5px solid ${entregado ? t.greenBorder : isDragOver ? t.accent : t.border}`,
+                    boxShadow: isDragging ? t.shadowMd : t.shadow,
+                    opacity: isDragging ? 0.5 : 1,
+                    cursor: entregado ? 'default' : 'grab',
+                    transition: 'all 0.2s ease',
+                    transform: isDragOver ? 'scale(1.01)' : 'none',
+                  }}>
+
+                  {/* Número de parada / check */}
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: entregado ? 16 : 12, fontWeight: 800,
+                    background: entregado ? t.greenBorder : t.accent,
+                    color: entregado ? t.greenText : t.accentText,
+                  }}>
+                    {entregado ? '✓' : idx + 1}
+                  </div>
+
+                  {/* Handle drag mobile */}
+                  {!entregado && (
+                    <div
+                      onTouchStart={e => handleTouchStart(e, idx)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      style={{ fontSize: 16, color: t.textFaint, flexShrink: 0, cursor: 'grab', userSelect: 'none', touchAction: 'none', padding: '4px 2px' }}>
+                      ≡
+                    </div>
+                  )}
+
+                  {/* Info del pedido */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 700,
+                      color: entregado ? t.greenText : t.text,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      textDecoration: entregado ? 'line-through' : 'none',
+                      opacity: entregado ? 0.8 : 1,
+                    }}>
+                      {p.descripcion}
+                    </div>
+                    <div style={{ fontSize: 10, color: entregado ? t.greenText : t.textFaint, marginTop: 2, opacity: entregado ? 0.7 : 1 }}>
+                      {entregado
+                        ? '¡Entregado!'
+                        : p.clientes?.nombre ?? 'Cliente'}
+                      {!entregado && p.clientes?.telefono && ` · ${p.clientes.telefono}`}
+                    </div>
+                  </div>
+
+                  {/* Monto */}
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{
+                      fontSize: 14, fontWeight: 800, fontFamily: 'monospace',
+                      color: entregado ? t.greenText : t.text,
+                      textDecoration: entregado ? 'line-through' : 'none',
+                      opacity: entregado ? 0.7 : 1,
+                    }}>
+                      {formatPeso(monto)}
+                    </div>
+                    <div style={{ fontSize: 9, color: entregado ? t.greenText : t.textFaint }}>
+                      {toFloat(p.monto_seña) > 0 ? `seña: ${formatPeso(p.monto_seña)}` : 'sin seña'}
+                    </div>
+                  </div>
+
+                  {/* Botón entregar / badge entregado */}
+                  {entregado ? (
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: t.greenBorder, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                      ✅
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setPedidoEntregar(p)}
+                      style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: t.accent, color: t.accentText, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700 }}>
+                      📦
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
+      {/* Bottom nav mobile */}
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: t.navBg, backdropFilter: 'blur(16px)', borderTop: `1px solid ${t.border}`, padding: '10px 0 20px', display: 'flex', justifyContent: 'space-around', zIndex: 50 }}>
           {[['⊞','Inicio','/dashboard'],['↗','Ventas','/ventas'],['◎','Cobros','/cobranzas'],['📋','Pedidos','/pedidos']].map(([icon,label,href]) => (
@@ -800,7 +1059,15 @@ export function PedidosView({ usuario, pedidos }: PedidosViewProps) {
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>📦 Confirmar entrega</div>
               <button onClick={() => setPedidoEntregar(null)} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${t.border}`, background: t.surfaceAlt, color: t.textMuted, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
-            <ModalConfirmarEntrega pedido={pedidoEntregar} t={t} dark={dark} pedidosHook={pedidos} onClose={() => setPedidoEntregar(null)} />
+            <ModalConfirmarEntrega
+              pedido={pedidoEntregar} t={t} dark={dark} pedidosHook={pedidos}
+              onClose={() => {
+                // Si el pedido estaba en el recorrido, marcarlo como entregado localmente
+                // para que aparezca el check verde sin desaparecer del recorrido
+                setEntregadosHoy(prev => new Set([...prev, pedidoEntregar.id]))
+                setPedidoEntregar(null)
+              }}
+            />
           </div>
         </div>
       )}
