@@ -46,6 +46,8 @@ const tema = {
     green:'#f0fdf4',greenBorder:'#bbf7d0',greenText:'#166534',
     navBg:'rgba(255,255,255,0.92)',shadow:'0 1px 4px rgba(0,0,0,0.06)',shadowMd:'0 4px 16px rgba(0,0,0,0.08)',
     skeletonBase:'#ebebeb',skeletonShine:'#f5f5f5',
+    violeta:'#faf5ff', violetaBorder:'#e9d5ff', violetaText:'#7c3aed',
+
   },
   dark: {
     bg:'#141210',surface:'#1c1916',surfaceAlt:'#211e1b',border:'#2e2924',borderLight:'#252019',
@@ -56,6 +58,7 @@ const tema = {
     green:'#0e1f12',greenBorder:'#1a3820',greenText:'#4a7a54',
     navBg:'rgba(20,18,16,0.95)',shadow:'0 1px 6px rgba(0,0,0,0.4)',shadowMd:'0 4px 20px rgba(0,0,0,0.5)',
     skeletonBase:'#211e1b',skeletonShine:'#2e2924',
+    violeta:'#160e25', violetaBorder:'#3b1f5e', violetaText:'#a78bfa',
   },
 }
 type Tema = typeof tema.light
@@ -323,6 +326,14 @@ function MobileView({ usuario, dashboard, pedidos, dark, setDark, t, setModalCuo
                 <span style={{fontSize:22,flexShrink:0}}>◉</span>
                 <div><div style={{fontSize:12,fontWeight:700,color:t.greenText}}>Personal</div><div style={{fontSize:10,color:t.greenText,opacity:0.75}}>Mis finanzas</div></div>
               </button>
+
+             {/* ayuda*/}
+              <button onClick={()=>{setShowMenu(false);router.push('/ayuda')}}
+                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${t.violetaBorder}`, background: t.violeta, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{fontSize:22,flexShrink:0}}>?</span>
+                <div><div style={{fontSize:12,fontWeight:700,color:t.violetaText}}>Ayuda</div><div style={{fontSize:10,color:t.violetaText,opacity:0.75}}>Tutorial y guía</div></div>
+              </button>
+              
 
             </div>
             <button onClick={()=>setShowMenu(false)}

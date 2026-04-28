@@ -4,7 +4,7 @@
 import { useRouter } from 'next/navigation'
 
 interface SidebarProps {
-  activo: 'dashboard' | 'ventas' | 'cobranzas' | 'pedidos' | 'stock' | 'costos' | 'personal' | 'contable'
+  activo: 'dashboard' | 'ventas' | 'cobranzas' | 'clientes' | 'pedidos' | 'stock' | 'costos' | 'personal' | 'contable' | 'ayuda'
   usuario: { nombre: string; tier: string; avatar: string }
   dark: boolean
   setDark: (v: boolean) => void
@@ -19,12 +19,17 @@ const NAV_ITEMS = [
   { id: 'dashboard',  label: 'Dashboard',  icon: '⊞', href: '/dashboard'  },
   { id: 'ventas',     label: 'Ventas',      icon: '↗', href: '/ventas'     },
   { id: 'cobranzas',  label: 'Cobranzas',   icon: '◎', href: '/cobranzas'  },
-  { id: 'clientes', label: 'Clientes', icon: '👥', href: '/clientes' },
+  { id: 'clientes',   label: 'Clientes',    icon: '👥', href: '/clientes'   },
   { id: 'pedidos',    label: 'Pedidos',     icon: '📦', href: '/pedidos'    },
   { id: 'stock',      label: 'Stock',       icon: '▦', href: '/stock'      },
   { id: 'costos',     label: 'Costos',      icon: '📊', href: '/costos'     },
   { id: 'personal',   label: 'Personal',    icon: '◉', href: '/personal'   },
   { id: 'contable',   label: 'Contable',    icon: '◒', href: '/contable'   },
+] as const
+
+// Items del footer (separados para no mezclar navegación con acciones)
+const FOOTER_NAV = [
+  { id: 'ayuda', label: 'Ayuda', icon: '?', href: '/ayuda' },
 ] as const
 
 const TIER_LABEL: Record<string, string> = {
@@ -45,8 +50,8 @@ export function Sidebar({ activo, usuario, dark, setDark, t }: SidebarProps) {
         <span style={{ color: t.text, fontWeight: 800, fontSize: 15, letterSpacing: '-0.4px' }}>finti</span>
       </div>
 
-      {/* Nav items */}
-      <nav style={{ flex: 1, padding: '8px 5px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* Nav items principales */}
+      <nav style={{ flex: 1, padding: '8px 5px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
         {NAV_ITEMS.map(({ id, label, icon, href }) => {
           const active = id === activo
           return (
@@ -75,6 +80,32 @@ export function Sidebar({ activo, usuario, dark, setDark, t }: SidebarProps) {
 
       {/* Footer */}
       <div style={{ padding: '8px 5px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+        {/* Link a Ayuda */}
+        {FOOTER_NAV.map(({ id, label, icon, href }) => {
+          const active = id === activo
+          return (
+            <button
+              key={id}
+              onClick={() => router.push(href)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '7px 7px', borderRadius: 7, border: 'none',
+                background: active ? t.surfaceAlt : 'transparent',
+                borderLeft: `2px solid ${active ? t.accent : 'transparent'}`,
+                color: active ? t.accent : t.textMuted,
+                cursor: 'pointer', width: '100%', textAlign: 'left' as const,
+                fontSize: 11, fontWeight: active ? 700 : 400,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = t.surfaceAlt }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ fontSize: 13, width: 16, textAlign: 'center' as const }}>{icon}</span>
+              {label}
+            </button>
+          )
+        })}
 
         {/* Toggle dark mode */}
         <button
