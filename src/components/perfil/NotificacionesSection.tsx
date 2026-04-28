@@ -265,7 +265,7 @@ export function NotificacionesSection({ t }: { t: Tema }) {
   gap: 10,
   boxShadow: t.shadow,
 }}>
-  ⏰ 08:00 AM
+  ⏰ 08:00 AM - 09:00 AM
 </div>
           </div>
 

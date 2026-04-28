@@ -31,8 +31,9 @@ export function MenuMas({ t, dark }: MenuMasProps) {
   const ir = (href: string) => { setOpen(false); router.push(href) }
 
   // Colores fijos por módulo — no dependen del tema del padre
-  const verde = { bg: dark ? '#0e1f12' : '#f0fdf4', border: dark ? '#1a3820' : '#bbf7d0', text: dark ? '#4a7a54' : '#166534' }
-  const azul  = { bg: dark ? '#0e1520' : '#eff6ff', border: dark ? '#1a2e50' : '#bfdbfe', text: dark ? '#60a5fa' : '#1d4ed8' }
+  const verde   = { bg: dark ? '#0e1f12' : '#f0fdf4', border: dark ? '#1a3820' : '#bbf7d0', text: dark ? '#4a7a54' : '#166634' }
+  const azul    = { bg: dark ? '#0e1520' : '#eff6ff', border: dark ? '#1a2e50' : '#bfdbfe', text: dark ? '#60a5fa' : '#1d4ed8' }
+  const violeta = { bg: dark ? '#160e25' : '#faf5ff', border: dark ? '#3b1f5e' : '#e9d5ff', text: dark ? '#a78bfa' : '#7c3aed' }
 
   return (
     <>
@@ -97,6 +98,15 @@ export function MenuMas({ t, dark }: MenuMasProps) {
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: verde.text }}>Personal</div>
                   <div style={{ fontSize: 10, color: verde.text, opacity: 0.75 }}>Mis finanzas</div>
+                </div>
+              </button>
+
+              <button onClick={() => ir('/ayuda')}
+                style={{ padding: '13px 12px', borderRadius: 13, border: `1px solid ${violeta.border}`, background: violeta.bg, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' as const }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>?</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: violeta.text }}>Ayuda</div>
+                  <div style={{ fontSize: 10, color: violeta.text, opacity: 0.75 }}>Tutorial y guía</div>
                 </div>
               </button>
 
